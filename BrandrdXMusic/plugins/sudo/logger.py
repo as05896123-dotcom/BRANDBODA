@@ -3,27 +3,41 @@ from pyrogram import filters
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import SUDOERS
 from BrandrdXMusic.utils.database import add_off, add_on
-from BrandrdXMusic.utils.decorators.language import language
 
-
-@app.on_message(filters.command(["logger"]) & SUDOERS)
-@language
-async def logger(client, message, _):
-    usage = _["log_1"]
+# دالة تفعيل أو تعطيل إرسال السجلات إلى مجموعة اللوج
+@app.on_message(filters.command(["logger", "السجل", "سجل"]) & SUDOERS)
+async def logger(client, message):
+    usage = (
+        "🥀 **طـريـقـة الاسـتـخـدام :**\n\n"
+        "• logger enable\n"
+        "• تفعيل السجل\n\n"
+        "• logger disable\n"
+        "• تعطيل السجل"
+    )
+    
     if len(message.command) != 2:
         return await message.reply_text(usage)
-    state = message.text.split(None, 1)[1].strip().lower()
-    if state == "enable":
+    
+    # دمج النص للتحقق من الأوامر المركبة مثل "تفعيل السجل"
+    text = message.text.strip()
+    command_arg = message.text.split(None, 1)[1].strip().lower()
+
+    if command_arg == "enable" or "تفعيل" in text:
         await add_on(2)
-        await message.reply_text(_["log_2"])
-    elif state == "disable":
+        await message.reply_text("♥️ **تـم تـفـعـيـل سـجـل الـبـوت (Logger) بـنـجـاح.**")
+    elif command_arg == "disable" or "تعطيل" in text:
         await add_off(2)
-        await message.reply_text(_["log_3"])
+        await message.reply_text("💕 **تـم تـعـطـيـل سـجـل الـبـوت (Logger) بـنـجـاح.**")
     else:
         await message.reply_text(usage)
 
-@app.on_message(filters.command(["cookies"]) & SUDOERS)
-@language
-async def logger(client, message, _):
-    await message.reply_document("cookies/logs.csv")
-    await message.reply_text("Please check given file to cookies file choosing logs...")
+# دالة سحب ملف السجلات
+@app.on_message(filters.command(["cookies", "logs", "ملف_السجل", "السجلات"]) & SUDOERS)
+async def get_cookies_logs(client, message):
+    try:
+        await message.reply_document(
+            "cookies/logs.csv",
+            caption="🧚 **تـفـضـل مـلـف سـجـلات الـبـوت (Logs/Cookies)...**"
+        )
+    except:
+        await message.reply_text("🥀 **عـذراً، لـم يـتـم الـعـثـور عـلـى مـلـف الـسـجـلات.**")
