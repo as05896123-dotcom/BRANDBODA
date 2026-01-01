@@ -36,6 +36,11 @@ from config import BANNED_USERS, lyrical
             "vplayforce",
             "cplayforce",
             "cvplayforce",
+            "شغل",
+            "تشغيل",
+            "فيديو",
+            "فيد",
+            "سمعني"
         ]
     )
     & filters.group
@@ -53,6 +58,11 @@ async def play_commnd(
     url,
     fplay,
 ):
+    # ━━━ تعديل لضمان تشغيل الفيديو بالأوامر العربية ━━━
+    if message.command[0] in ["فيديو", "فيد"]:
+        video = True
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
     mystic = await message.reply_text(
         _["play_2"].format(channel) if channel else _["play_1"]
     )
@@ -188,7 +198,7 @@ async def play_commnd(
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
                 return await mystic.edit_text(
-                    "» sᴘᴏᴛɪғʏ ɪs ɴᴏᴛ sᴜᴘᴘᴏʀᴛᴇᴅ ʏᴇᴛ.\n\nᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ."
+                    "» عــذراً ســبــوتــيــفــاي غــيــر مــدعــوم حــالــيــاً.\n\nتــأكــد مــن وضــع كــود الــتــطــبــيــق فــي الــإعــدادات."
                 )
             if "track" in url:
                 try:
@@ -505,7 +515,7 @@ async def play_music(client, CallbackQuery, _):
 async def piyush_check(client, CallbackQuery):
     try:
         await CallbackQuery.answer(
-            "» ʀᴇᴠᴇʀᴛ ʙᴀᴄᴋ ᴛᴏ ᴜsᴇʀ ᴀᴄᴄᴏᴜɴᴛ :\n\nᴏᴘᴇɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ sᴇᴛᴛɪɴɢs.\n-> ᴀᴅᴍɪɴɪsᴛʀᴀᴛᴏʀs\n-> ᴄʟɪᴄᴋ ᴏɴ ʏᴏᴜʀ ɴᴀᴍᴇ\n-> ᴜɴᴄʜᴇᴄᴋ ᴀɴᴏɴʏᴍᴏᴜs ᴀᴅᴍɪɴ ᴘᴇʀᴍɪssɪᴏɴs.",
+            "» يــرجــى الــعــودة لــحــســاب الــمــســتــخــدم :\n\n- افــتــح إعــدادات الــمــجــمــوعــة.\n- الــمــشــرفــيــن\n- اضــغــط عــلــى اســمــك\n- قــم بــإلــغــاء صــلاحــيــة الــتــخــفــي.",
             show_alert=True,
         )
     except:
@@ -516,8 +526,7 @@ async def piyush_check(client, CallbackQuery):
 @languageCB
 async def play_playlists_command(client, CallbackQuery, _):
     callback_data = CallbackQuery.data.strip()
-    callback_request = callback_data.split(None, 1)[1]
-    (
+    callback_request = callback_data.split(None, 1)[1](
         videoid,
         user_id,
         ptype,
@@ -603,8 +612,7 @@ async def play_playlists_command(client, CallbackQuery, _):
 @languageCB
 async def slider_queries(client, CallbackQuery, _):
     callback_data = CallbackQuery.data.strip()
-    callback_request = callback_data.split(None, 1)[1]
-    (
+    callback_request = callback_data.split(None, 1)[1](
         what,
         rtype,
         query,
@@ -660,4 +668,4 @@ async def slider_queries(client, CallbackQuery, _):
         )
         return await CallbackQuery.edit_message_media(
             media=med, reply_markup=InlineKeyboardMarkup(buttons)
-)
+        )
