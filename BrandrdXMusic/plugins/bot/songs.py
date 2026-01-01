@@ -66,7 +66,7 @@ def download_internal(url, stype, format_id):
 # Song Module
 # ------------------------------------------------------------------
 
-@app.on_message(filters.command(["song", "يوت", "بحث"], prefixes=["", "/"]) & ~BANNED_USERS)
+@app.on_message(filters.command(["song", "يوت"], prefixes=["", "/"]) & ~BANNED_USERS)
 @language
 async def song_commad_private(client, message: Message, _):
     # لا نقوم بحذف الرسالة إذا لم تكن تحتوي على "/" لتجنب المشاكل في المجموعات
