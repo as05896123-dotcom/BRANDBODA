@@ -12,15 +12,26 @@ SPAM_CHATS = []
 
 
 @app.on_message(
-    filters.command(["all", "mention", "mentionall"], prefixes=["/", "@", ".", "#"])
+    filters.command(
+        [
+            "all",
+            "mention",
+            "mentionall",
+            "تاك",
+            "منشن",
+            "الكل",
+            "نادي",
+            "للجميع"
+        ],
+        prefixes=["/", "@", ".", "#", ""]
+    )
     & admin_filter
 )
 async def tag_all_users(_, message):
-
     replied = message.reply_to_message
     if len(message.command) < 2 and not replied:
         await message.reply_text(
-            "** ɢɪᴠᴇ sᴏᴍᴇ ᴛᴇxᴛ ᴛᴏ ᴛᴀɢ ᴀʟʟ, ʟɪᴋᴇ »** `@all Hi Friends`"
+            "**» اعــطــنــي نــصــاً لــلــمــنــشــن ، مــثــال »** `تاك السلام عليكم`"
         )
         return
     if replied:
@@ -55,7 +66,7 @@ async def tag_all_users(_, message):
             if usernum == 5:
                 await app.send_message(
                     message.chat.id,
-                    f"{text}\n{usertxt}\n\n|| ➥ ᴏғғ ᴛᴀɢɢɪɴɢ ʙʏ » /cancel ||",
+                    f"{text}\n{usertxt}\n\n|| ➥ لــلإيــقــاف ارســل » بس ||",
                 )
                 await asyncio.sleep(2)
                 usernum = 0
@@ -80,8 +91,14 @@ async def tag_all_users(_, message):
             "alloff",
             "cancelall",
             "allcancel",
+            "بس",
+            "ايقاف",
+            "إيقاف",
+            "الغاء",
+            "إلغاء",
+            "اسكت"
         ],
-        prefixes=["/", "@", "#"],
+        prefixes=["/", "@", "#", ""]
     )
     & admin_filter
 )
@@ -92,8 +109,8 @@ async def cancelcmd(_, message):
             SPAM_CHATS.remove(chat_id)
         except Exception:
             pass
-        return await message.reply_text("**ᴛᴀɢɢɪɴɢ ᴘʀᴏᴄᴇss sᴜᴄᴄᴇssғᴜʟʟʏ sᴛᴏᴘᴘᴇᴅ!**")
+        return await message.reply_text("**» تــم إيــقــاف الــمــنــشــن بــنــجــاح !**")
 
     else:
-        await message.reply_text("**ɴᴏ ᴘʀᴏᴄᴇss ᴏɴɢᴏɪɴɢ!**")
+        await message.reply_text("**» لا يــوجــد مــنــشــن قــائــم حــالــيــاً !**")
         return
