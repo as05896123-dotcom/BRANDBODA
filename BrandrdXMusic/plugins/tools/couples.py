@@ -51,7 +51,7 @@ async def couples(client, message: Message):
                     list_of_users.append(i.user.id)
 
             if len(list_of_users) < 2:
-                return await msg.edit("⚠️ **عـدد الأعـضـاء قـلـيـل جـداً لاخـتـيـار ثـنـائـي.**")
+                return await msg.edit("🥀 **عـدد الأعـضـاء قـلـيـل جـداً لاخـتـيـار ثـنـائـي.**")
 
             c1_id = random.choice(list_of_users)
             c2_id = random.choice(list_of_users)
