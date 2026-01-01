@@ -29,7 +29,7 @@ async def useradd(client, message: Message):
 
 
 # دالة رفع الحظر العام
-@app.on_message(filters.command(["unblock", "الغاء_عام", "رفع_عام"]) & SUDOERS)
+@app.on_message(filters.command(["unblock", "فك_بلوك", "رفع_عام"]) & SUDOERS)
 async def userdel(client, message: Message):
     if not message.reply_to_message:
         if len(message.command) != 2:
