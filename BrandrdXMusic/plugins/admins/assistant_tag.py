@@ -12,7 +12,17 @@ SPAM_CHATS = []
 
 @app.on_message(
     filters.command(
-        ["atag", "aall", "amention", "amentionall"], prefixes=["/", "@", ".", "#"]
+        [
+            "atag",
+            "aall",
+            "amention",
+            "amentionall",
+            "تاك المساعد",
+            "منشن المساعد",
+            "تاك م",
+            "منشن م"
+        ],
+        prefixes=["/", "@", ".", "#", ""]
     )
     & admin_filter
 )
@@ -20,12 +30,12 @@ async def atag_all_useres(_, message):
     userbot = await get_assistant(message.chat.id)
     if message.chat.id in SPAM_CHATS:
         return await message.reply_text(
-            "ᴛᴀɢɢɪɴɢ ᴘʀᴏᴄᴇss ɪs ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ sᴛᴏᴘ sᴏ ᴜsᴇ /acancel"
+            "**» عــمــلــيــة الــمــنــشــن شــغــالــة حــالــيــاً .. لإيــقــافــهــا ارســل (ايقاف المساعد)**"
         )
     replied = message.reply_to_message
     if len(message.command) < 2 and not replied:
         await message.reply_text(
-            "** ɢɪᴠᴇ sᴏᴍᴇ ᴛᴇxᴛ ᴛᴏ ᴛᴀɢ ᴀʟʟ, ʟɪᴋᴇ »** `@aall Hi Friends`"
+            "**» اعــطــنــي نــصــاً لــلــمــنــشــن ، مــثــال »** `تاك المساعد هلا`"
         )
         return
     if replied:
@@ -75,7 +85,20 @@ async def atag_all_useres(_, message):
             pass
 
 
-
+@app.on_message(
+    filters.command(
+        [
+            "acancel",
+            "astop",
+            "stopatag",
+            "ايقاف المساعد",
+            "بس يا مساعد",
+            "وقف المساعد"
+        ],
+        prefixes=["/", "@", ".", "#", ""]
+    )
+    & admin_filter
+)
 async def cancelcmd(_, message):
     chat_id = message.chat.id
     if chat_id in SPAM_CHATS:
@@ -83,8 +106,8 @@ async def cancelcmd(_, message):
             SPAM_CHATS.remove(chat_id)
         except Exception:
             pass
-        return await message.reply_text("**ᴛᴀɢɢɪɴɢ ᴘʀᴏᴄᴇss sᴜᴄᴄᴇssғᴜʟʟʏ sᴛᴏᴘᴘᴇᴅ!**")
+        return await message.reply_text("**» تــم إيــقــاف الــمــنــشــن بــنــجــاح !**")
 
     else:
-        await message.reply_text("**ɴᴏ ᴘʀᴏᴄᴇss ᴏɴɢᴏɪɴɢ!**")
+        await message.reply_text("**» لا يــوجــد مــنــشــن قــائــم حــالــيــاً !**")
         return
