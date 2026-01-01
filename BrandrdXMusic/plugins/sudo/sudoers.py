@@ -60,7 +60,7 @@ async def sudoers_list(client, message: Message):
     if message.from_user.id not in SUDOERS:
         return await message.reply_text(
             "👑 **مـالـك الـبـوت الأسـاسـي :**\n\n"
-            "1➤ <a href='https://t.me/S_G0C7'>🇷🇺⛦°𝗕𝗢𝗗𝗔 𓆩🇽𓆪 𝗞𝗜𝗡𝗚🇳</a>",
+            "1➤ <a href='https://t.me/S_G0C7'>🇪🇬⛦°𝗕𝗢𝗗𝗔 𓆩🇽𓆪 𝗞𝗜𝗡𝗚🇳</a>",
             disable_web_page_preview=True
         )
 
