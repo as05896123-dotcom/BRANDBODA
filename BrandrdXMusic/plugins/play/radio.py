@@ -25,15 +25,15 @@ from BrandrdXMusic.utils.database import (
 from BrandrdXMusic.utils.logger import play_logs
 from BrandrdXMusic.utils.stream.stream import stream
 
-# تم تعريب أسماء الإذاعات لتكون أسهل في الاستخدام
+# تم تحديث الأسماء (القرآن الكريم) والروابط
 RADIO_STATION = {
+    "القرآن الكريم": "https://stream.radiojar.com/8s5u5tpdtwzuv",
     "نجوم اف ام": "https://ssl.mz-audiostreaming.com/nogoumfm",
     "نايل اف ام": "https://ssl.mz-audiostreaming.com/nilefm",
     "نغم اف ام": "https://ssl.mz-audiostreaming.com/naghamfm",
     "ميجا اف ام": "https://ssl.mz-audiostreaming.com/megafm",
     "الراديو 9090": "https://9090streaming.mobtada.com/9090FMEGYPT",
     "راديو مصر": "https://live.radiomasr.net/RADIOMASR",
-    "إذاعة القرآن الكريم": "https://stream.radiojar.com/8s5u5tpdtwzuv",
     "محطة مصر": "https://s3.radio.co/s95f66299d/listen",
     "شعبى اف ام": "https://radio.masr.me/sha3byfm",
     "اون سبورت اف ام": "https://stream.radiojar.com/4884313205tv",
@@ -127,20 +127,19 @@ async def radio(client, message: Message):
             pass
     await msg.delete()
     
-    # تحسين استخراج اسم المحطة ليدعم الأسماء التي تحتوي مسافات
     if len(message.command) < 2:
         return await message.reply(
-            f"**الـرجـاء اخـتـيـار إذاعـة لـتـشـغـيـلـهـا:**\n\n{valid_stations}\n\n**مـثـال:**\n`/radio نجوم اف ام`"
+            f"**الـرجـاء اخـتـيـار إذاعـة لـتـشـغـيـلـهـا:**\n\n{valid_stations}\n\n**مـثـال:**\n`راديو القرآن الكريم`"
         )
         
     station_name = " ".join(message.command[1:])
     
-    # البحث عن المحطة (Case Insensitive) للتعامل مع الأحرف الكبيرة والصغيرة
+    # البحث عن المحطة (تطبيع الحروف للبحث المرن)
     target_station = None
     for station in RADIO_STATION:
-        # توحيد صيغة الهمزات والياءات لتسهيل البحث (أ/إ/ا - ي/ى)
-        clean_input = station_name.replace("أ", "ا").replace("إ", "ا").replace("ة", "ه").replace("ى", "ي")
-        clean_station = station.replace("أ", "ا").replace("إ", "ا").replace("ة", "ه").replace("ى", "ي")
+        # توحيد: أ، إ، آ -> ا | ة -> ه | ى -> ي
+        clean_input = station_name.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي")
+        clean_station = station.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي")
         
         if clean_station == clean_input:
             target_station = station
@@ -201,4 +200,4 @@ async def radio(client, message: Message):
 
 
 __MODULE__ = "الراديو"
-__HELP__ = f"\n/radio [اسم المحطة] - لـتـشـغـيـل **الـراديـو الـمـصـري**\n\n**الـمـحـطـات الـمـتـاحـة:**\n{valid_stations}"
+__HELP__ = f"\nراديو [المحطة] - لـتـشـغـيـل **الـراديـو الـمـصـري**\n\n**الـمـحـطـات الـمـتـاحـة:**\n{valid_stations}"
