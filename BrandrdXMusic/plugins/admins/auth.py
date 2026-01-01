@@ -14,7 +14,14 @@ from BrandrdXMusic.utils.inline import close_markup
 from config import BANNED_USERS, adminlist
 
 
-@app.on_message(filters.command("auth") & filters.group & ~BANNED_USERS)
+@app.on_message(
+    filters.command(
+        ["auth", "رفع", "رفع ادمن", "ادمن"],
+        prefixes=["/", "@", ".", "#", ""]
+    )
+    & filters.group
+    & ~BANNED_USERS
+)
 @AdminActual
 async def auth(client, message: Message, _):
     if not message.reply_to_message:
@@ -43,7 +50,14 @@ async def auth(client, message: Message, _):
         return await message.reply_text(_["auth_3"].format(user.mention))
 
 
-@app.on_message(filters.command("unauth") & filters.group & ~BANNED_USERS)
+@app.on_message(
+    filters.command(
+        ["unauth", "تنزيل", "تنزيل ادمن", "الغاء ادمن"],
+        prefixes=["/", "@", ".", "#", ""]
+    )
+    & filters.group
+    & ~BANNED_USERS
+)
 @AdminActual
 async def unauthusers(client, message: Message, _):
     if not message.reply_to_message:
@@ -63,7 +77,12 @@ async def unauthusers(client, message: Message, _):
 
 
 @app.on_message(
-    filters.command(["authlist", "authusers"]) & filters.group & ~BANNED_USERS
+    filters.command(
+        ["authlist", "authusers", "الادمنية", "قائمة الادمن", "المرفوعين"],
+        prefixes=["/", "@", ".", "#", ""]
+    )
+    & filters.group
+    & ~BANNED_USERS
 )
 @language
 async def authusers(client, message: Message, _):
