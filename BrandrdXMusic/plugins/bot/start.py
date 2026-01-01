@@ -27,11 +27,12 @@ from strings import get_string
 @LanguageStart
 async def start_pm(client, message: Message, _):
     await add_served_user(message.from_user.id)
-    await message.react("❤")
+    await message.react("♥️")
     if len(message.text.split()) > 1:
         name = message.text.split(None, 1)[1]
         if name[0:4] == "help":
             keyboard = help_pannel(_)
+            # تم ترك استيكر المساعدة كما هو، إذا أردت تغييره أخبرني
             await message.reply_sticker("CAACAgUAAxkBAAEQI1RlTLnRAy4h9lOS6jgS5FYsQoruOAAC1gMAAg6ryVcldUr_lhPexzME")
             return await message.reply_photo(
                 photo=config.START_IMG_URL,
@@ -43,7 +44,7 @@ async def start_pm(client, message: Message, _):
             if await is_on_off(2):
                 return await app.send_message(
                     chat_id=config.LOGGER_ID,
-                    text=f"{message.from_user.mention} ᴊᴜsᴛ sᴛᴀʀᴛᴇᴅ ᴛʜᴇ ʙᴏᴛ ᴛᴏ ᴄʜᴇᴄᴋ <b>sᴜᴅᴏʟɪsᴛ</b>.\n\n<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>\n<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}",
+                    text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **قـائـمـة الـمـطـوريـن**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
                 )
             return
         if name[0:3] == "inf":
@@ -81,43 +82,46 @@ async def start_pm(client, message: Message, _):
             if await is_on_off(2):
                 return await app.send_message(
                     chat_id=config.LOGGER_ID,
-                    text=f"{message.from_user.mention} ᴊᴜsᴛ sᴛᴀʀᴛᴇᴅ ᴛʜᴇ ʙᴏᴛ ᴛᴏ ᴄʜᴇᴄᴋ <b>ᴛʀᴀᴄᴋ ɪɴғᴏʀᴍᴀᴛɪᴏɴ</b>.\n\n<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>\n<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}",
+                    text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **مـعـلـومـات الـمـقـطـع**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
                 )
     else:
 
         try:
             out = private_panel(_)
-            lol = await message.reply_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ︎ {}.. ❣️".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 🥳".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💥".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 🤩".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💌".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💞".format(message.from_user.mention))
+            lol = await message.reply_text("اهـلاً بـك عـزيـزي ♡ {}.. 🥀".format(message.from_user.mention))
+            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💞".format(message.from_user.mention))
+            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤍".format(message.from_user.mention))
+            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. ♥️".format(message.from_user.mention))
+            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤎".format(message.from_user.mention))
+            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💕".format(message.from_user.mention))
                
             await lol.delete()
-            lols = await message.reply_text("**⚡️ѕ**")
+            lols = await message.reply_text("**💝 جـ**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("⚡ѕт")        
+            await lols.edit_text("🥀 جـارِ")        
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтα**")
+            await lols.edit_text("**💞 جـارِ الـ**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαя**")
+            await lols.edit_text("**🤍 جـارِ الـتـشـ**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαят**")
+            await lols.edit_text("**♥️ جـارِ الـتـشـغـيـ**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятι**")
+            await lols.edit_text("**🤎 جـارِ الـتـشـغـيـل**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιи**")
+            await lols.edit_text("**💕 جـارِ الـتـشـغـيـل...**")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιиg**")
-            await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιиg.**")
+            await lols.edit_text("**💝 تـم الـتـشـغـيـل**")
 
-            await lols.edit_text("**⚡ѕтαятιиg....**")
+            await lols.edit_text("**🥀 تـم الـتـشـغـيـل**")
 
-            await lols.edit_text("**⚡ѕтαятιиg.**")
-            await lols.edit_text("**⚡ѕтαятιиg....**")
-            m = await message.reply_sticker("CAACAgUAAxkBAAEQI1BlTLmx7PtOO3aPNshEU2gCy7iAFgACNQUAApqMuVeA6eJ50VbvmDME")
+            await lols.edit_text("**💞 تـم الـتـشـغـيـل**")
+            await lols.edit_text("**🤍 تـم الـتـشـغـيـل**")
+            
+            # -----------------------------------------------------
+            # تم استبدال الاستيكر هنا بالكود الجديد
+            # -----------------------------------------------------
+            m = await message.reply_sticker("CAACAgUAAxkBAAID1WlW8wMKVEzevUrFCRmqfgWD80AXAAILFQAC-vEZVMBmWHCQ-sJuHgQ")
+            
             if message.chat.photo:
 
                 userss_photo = await app.download_media(
@@ -143,7 +147,7 @@ async def start_pm(client, message: Message, _):
             sender_name = message.from_user.first_name
             return await app.send_message(
                 config.LOG_GROUP_ID,
-                f"{message.from_user.mention} ʜᴀs sᴛᴀʀᴛᴇᴅ ʙᴏᴛ. \n\n**ᴜsᴇʀ ɪᴅ : {sender_id}\n**ᴜsᴇʀ ɴᴀᴍᴇ: {sender_name}",
+                f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {sender_id}\n**الـاسـم : {sender_name}",
             )          
 
 @app.on_message(filters.command(["start"]) & filters.group & ~BANNED_USERS)
@@ -200,4 +204,3 @@ async def welcome(client, message: Message):
                 await message.stop_propagation()
         except Exception as ex:
             print(ex)
-
