@@ -1,37 +1,31 @@
-from pyrogram import Client, filters
-from pyrogram.types import Message
+import sys
+import io
+from pyrogram import filters
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from BrandrdXMusic import app
-from pyrogram import *
-from pyrogram.types import *
-from config import OWNER_ID
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram.raw.functions.phone import CreateGroupCall, DiscardGroupCall
-from pyrogram.raw.types import InputGroupCall
-from BrandrdXMusic.utils.database import get_assistant
-from telethon.tl.functions.phone import (
-    CreateGroupCallRequest,
-    DiscardGroupCallRequest,
-    GetGroupCallRequest,
-    InviteToGroupCallRequest,
-)
 
+# السماح بتحويل الأرقام الضخمة جداً إلى نصوص (لإصدارات بايثون الحديثة)
+try:
+    sys.set_int_max_str_digits(0)
+except AttributeError:
+    pass
 
-# vc on
+# إشعار بدء المكالمة
 @app.on_message(filters.video_chat_started)
 async def brah(_, msg):
-    await msg.reply("**😍ᴠɪᴅᴇᴏ ᴄʜᴀᴛ sᴛᴀʀᴛᴇᴅ🥳**")
+    await msg.reply("🥀 **بدأت المحادثة المرئية**")
 
 
-# vc off
+# إشعار انتهاء المكالمة
 @app.on_message(filters.video_chat_ended)
 async def brah2(_, msg):
-    await msg.reply("**😕ᴠɪᴅᴇᴏ ᴄʜᴀᴛ ᴇɴᴅᴇᴅ💔**")
+    await msg.reply("🥀 **تم اغلاق المحادثة المرئية**")
 
 
-# invite members on vc
+# إشعار دعوة أعضاء للمكالمة
 @app.on_message(filters.video_chat_members_invited)
-async def brah3(app: app, message: Message):
-    text = f"➻ {message.from_user.mention}\n\n**๏ ɪɴᴠɪᴛɪɴɢ ɪɴ ᴠᴄ ᴛᴏ :**\n\n**➻ **"
+async def brah3(client, message: Message):
+    text = f"🥀 {message.from_user.mention}\n\n**قام بدعوة هؤلاء للمكالمة :**\n\n**➻ **"
     x = 0
     for user in message.video_chat_members_invited.users:
         try:
@@ -41,15 +35,12 @@ async def brah3(app: app, message: Message):
             pass
 
     try:
-        invite_link = await app.export_chat_invite_link(message.chat.id)
         add_link = f"https://t.me/{app.username}?startgroup=true"
-        reply_text = f"{text} 🤭🤭"
-
         await message.reply(
-            reply_text,
+            text,
             reply_markup=InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton(text="๏ ᴊᴏɪɴ ᴠᴄ ๏", url=add_link)],
+                    [InlineKeyboardButton(text="🥀 انضم للمكالمة", url=add_link)],
                 ]
             ),
         )
@@ -57,49 +48,47 @@ async def brah3(app: app, message: Message):
         print(f"Error: {e}")
 
 
-####
-
-
-@app.on_message(filters.command("math", prefixes="/"))
-def calculate_math(client, message):
-    expression = message.text.split("/math ", 1)[1]
+# الآلة الحاسبة
+@app.on_message(
+    filters.command(
+        ["math", "احسب", "حساب"],
+        prefixes=["/", "!", ".", ""]
+    )
+)
+async def calculate_math(client, message):
+    if len(message.command) < 2:
+        return await message.reply("🥀 **يرجى كتابة المسألة الحسابية بجوار الأمر.**")
+    
+    expression = message.text.split(None, 1)[1]
     try:
+        # حساب النتيجة
         result = eval(expression)
-        response = f"ᴛʜᴇ ʀᴇsᴜʟᴛ ɪs : {result}"
-    except:
-        response = "ɪɴᴠᴀʟɪᴅ ᴇxᴘʀᴇssɪᴏɴ"
-    message.reply(response)
+        result_str = str(result)
+        
+        # إذا كان الرقم كبيراً جداً (أكثر من 4096 حرف)، يتم إرساله كملف
+        if len(result_str) > 4090:
+            with io.BytesIO(str.encode(result_str)) as out_file:
+                out_file.name = "result.txt"
+                await message.reply_document(
+                    document=out_file,
+                    caption="🥀 **الرقم كبير جداً، تم إرسال النتيجة في ملف.**"
+                )
+        else:
+            await message.reply(f"🥀 النتيجة : {result_str}")
+            
+    except ZeroDivisionError:
+        await message.reply("🥀 **لا يمكن القسمة على صفر.**")
+    except Exception:
+        await message.reply("🥀 **مسألة خاطئة، تأكد من كتابة الأرقام والرموز بشكل صحيح.**")
 
 
-@app.on_message(filters.command(["spg"], ["/", "!", "."]))
-async def search(event):
-    msg = await event.respond("Searching...")
-    async with aiohttp.ClientSession() as session:
-        start = 1
-        async with session.get(
-            f"https://content-customsearch.googleapis.com/customsearch/v1?cx=ec8db9e1f9e41e65e&q={event.text.split()[1]}&key=AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM&start={start}",
-            headers={"x-referer": "https://explorer.apis.google.com"},
-        ) as r:
-            response = await r.json()
-            result = ""
+__HELP__ = """
+**اوامر الالة الحاسبة**
 
-            if not response.get("items"):
-                return await msg.edit("No results found!")
-            for item in response["items"]:
-                title = item["title"]
-                link = item["link"]
-                if "/s" in item["link"]:
-                    link = item["link"].replace("/s", "")
-                elif re.search(r"\/\d", item["link"]):
-                    link = re.sub(r"\/\d", "", item["link"])
-                if "?" in link:
-                    link = link.split("?")[0]
-                if link in result:
-                    # remove duplicates
-                    continue
-                result += f"{title}\n{link}\n\n"
-            prev_and_next_btns = [
-                Button.inline("▶️Next▶️", data=f"next {start+10} {event.text.split()[1]}")
-            ]
-            await msg.edit(result, link_preview=False, buttons=prev_and_next_btns)
-            await session.close()
+- احسب [المسألة] : يقوم بحل المسائل الرياضية مهما كان حجم الرقم.
+
+**مثال:**
+- احسب 100 ** 100
+"""
+
+__MODULE__ = "الحساب"
