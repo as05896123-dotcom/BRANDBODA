@@ -25,18 +25,18 @@ from BrandrdXMusic.utils.database import (
 from BrandrdXMusic.utils.logger import play_logs
 from BrandrdXMusic.utils.stream.stream import stream
 
-# تم تحديث القائمة بإذاعات مصرية فقط وبجودة عالية
+# تم تعريب أسماء الإذاعات لتكون أسهل في الاستخدام
 RADIO_STATION = {
-    "Nogoum FM": "https://ssl.mz-audiostreaming.com/nogoumfm",
-    "Nile FM": "https://ssl.mz-audiostreaming.com/nilefm",
-    "Nagham FM": "https://ssl.mz-audiostreaming.com/naghamfm",
-    "Mega FM": "https://ssl.mz-audiostreaming.com/megafm",
-    "El Radio 9090": "https://9090streaming.mobtada.com/9090FMEGYPT",
-    "Radio Masr": "https://live.radiomasr.net/RADIOMASR",
-    "Quran Cairo": "https://stream.radiojar.com/8s5u5tpdtwzuv",
-    "Mahatat Masr": "https://s3.radio.co/s95f66299d/listen",
-    "Sha3by FM": "https://radio.masr.me/sha3byfm",
-    "On Sport FM": "https://stream.radiojar.com/4884313205tv",
+    "نجوم اف ام": "https://ssl.mz-audiostreaming.com/nogoumfm",
+    "نايل اف ام": "https://ssl.mz-audiostreaming.com/nilefm",
+    "نغم اف ام": "https://ssl.mz-audiostreaming.com/naghamfm",
+    "ميجا اف ام": "https://ssl.mz-audiostreaming.com/megafm",
+    "الراديو 9090": "https://9090streaming.mobtada.com/9090FMEGYPT",
+    "راديو مصر": "https://live.radiomasr.net/RADIOMASR",
+    "إذاعة القرآن الكريم": "https://stream.radiojar.com/8s5u5tpdtwzuv",
+    "محطة مصر": "https://s3.radio.co/s95f66299d/listen",
+    "شعبى اف ام": "https://radio.masr.me/sha3byfm",
+    "اون سبورت اف ام": "https://stream.radiojar.com/4884313205tv",
 }
 
 valid_stations = "\n".join([f"`{name}`" for name in sorted(RADIO_STATION.keys())])
@@ -130,7 +130,7 @@ async def radio(client, message: Message):
     # تحسين استخراج اسم المحطة ليدعم الأسماء التي تحتوي مسافات
     if len(message.command) < 2:
         return await message.reply(
-            f"**الـرجـاء اخـتـيـار إذاعـة لـتـشـغـيـلـهـا:**\n\n{valid_stations}\n\n**مـثـال:**\n`/radio Nogoum FM`"
+            f"**الـرجـاء اخـتـيـار إذاعـة لـتـشـغـيـلـهـا:**\n\n{valid_stations}\n\n**مـثـال:**\n`/radio نجوم اف ام`"
         )
         
     station_name = " ".join(message.command[1:])
@@ -138,7 +138,11 @@ async def radio(client, message: Message):
     # البحث عن المحطة (Case Insensitive) للتعامل مع الأحرف الكبيرة والصغيرة
     target_station = None
     for station in RADIO_STATION:
-        if station.lower() == station_name.lower():
+        # توحيد صيغة الهمزات والياءات لتسهيل البحث (أ/إ/ا - ي/ى)
+        clean_input = station_name.replace("أ", "ا").replace("إ", "ا").replace("ة", "ه").replace("ى", "ي")
+        clean_station = station.replace("أ", "ا").replace("إ", "ا").replace("ة", "ه").replace("ى", "ي")
+        
+        if clean_station == clean_input:
             target_station = station
             break
             
