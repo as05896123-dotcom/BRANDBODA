@@ -17,7 +17,12 @@ rel = {}
 
 
 @app.on_message(
-    filters.command(["admincache", "reload", "refresh"]) & filters.group & ~BANNED_USERS
+    filters.command(
+        ["admincache", "reload", "refresh", "تحديث", "تحديث الادمن", "ادمن", "ريلود"],
+        prefixes=["/", "!", ".", ""]
+    )
+    & filters.group
+    & ~BANNED_USERS
 )
 @language
 async def reload_admin_cache(client, message: Message, _):
@@ -46,7 +51,14 @@ async def reload_admin_cache(client, message: Message, _):
         await message.reply_text(_["reload_3"])
 
 
-@app.on_message(filters.command(["reboot"]) & filters.group & ~BANNED_USERS)
+@app.on_message(
+    filters.command(
+        ["reboot", "اعادة تشغيل", "ريستارت", "تنظيف", "رستر"],
+        prefixes=["/", "!", ".", ""]
+    )
+    & filters.group
+    & ~BANNED_USERS
+)
 @AdminActual
 async def restartbot(client, message: Message, _):
     mystic = await message.reply_text(_["reload_4"].format(app.mention))
@@ -92,7 +104,7 @@ async def close_menu(_, CallbackQuery):
         await CallbackQuery.answer()
         await CallbackQuery.message.delete()
         await CallbackQuery.message.reply_text(
-            f"Cʟᴏsᴇᴅ ʙʏ : {CallbackQuery.from_user.mention}"
+            f"🥀 **تم الاغلاق بواسطة :** {CallbackQuery.from_user.mention}"
         )
     except:
         pass
