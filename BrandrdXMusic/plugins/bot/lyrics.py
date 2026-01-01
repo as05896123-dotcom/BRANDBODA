@@ -74,7 +74,7 @@ async def lrsearch(client, message: Message):
     
     except Exception as e:
         print(f"Lyrics Search Error: {e}")
-        await m.edit(f"**• حـدث خـطـأ أثـنـاء الـبـحـث ⚠️**\n`{e}`")
+        await m.edit(f"**• حـدث خـطـأ أثـنـاء الـبـحـث 🥀**\n`{e}`")
 
 
 # -----------------------------------------------------------
