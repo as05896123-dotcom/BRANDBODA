@@ -25,7 +25,13 @@ def testspeed(m, _):
     return result
 
 
-@app.on_message(filters.command(["speedtest", "spt"]) & SUDOERS)
+@app.on_message(
+    filters.command(
+        ["speedtest", "spt", "سرعة", "سرعه", "السرعة"],
+        prefixes=["/", "!", ".", ""]
+    )
+    & SUDOERS
+)
 @language
 async def speedtest_function(client, message: Message, _):
     m = await message.reply_text(_["server_11"])
