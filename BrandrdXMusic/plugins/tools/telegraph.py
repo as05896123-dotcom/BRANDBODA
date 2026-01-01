@@ -14,14 +14,19 @@ def upload_file(file_path):
     if response.status_code == 200:
         return True, response.text.strip()
     else:
-        return False, f"ᴇʀʀᴏʀ: {response.status_code} - {response.text}"
+        return False, f"Error: {response.status_code} - {response.text}"
 
 
-@app.on_message(filters.command(["tgm", "tgt", "telegraph", "tl"]))
+@app.on_message(
+    filters.command(
+        ["tgm", "tgt", "telegraph", "tl", "تلجراف", "تليجراف", "رابط"],
+        prefixes=["/", "!", ".", ""]
+    )
+)
 async def get_link_group(client, message):
     if not message.reply_to_message:
         return await message.reply_text(
-            "Pʟᴇᴀsᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇᴅɪᴀ ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴏɴ Tᴇʟᴇɢʀᴀᴘʜ"
+            "**قم بالرد على صورة أو فيديو أو ملف لرفعه.**"
         )
 
     media = message.reply_to_message
@@ -34,31 +39,31 @@ async def get_link_group(client, message):
         file_size = media.document.file_size
 
     if file_size > 200 * 1024 * 1024:
-        return await message.reply_text("Pʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴍᴇᴅɪᴀ ғɪʟᴇ ᴜɴᴅᴇʀ 200MB.")
+        return await message.reply_text("يجب أن يكون حجم الملف أقل من 200 ميجابايت.")
 
     try:
-        text = await message.reply("Pʀᴏᴄᴇssɪɴɢ...")
+        text = await message.reply("🥀 جارٍ المعالجة...")
 
         async def progress(current, total):
             try:
-                await text.edit_text(f"📥 Dᴏᴡɴʟᴏᴀᴅɪɴɢ... {current * 100 / total:.1f}%")
+                await text.edit_text(f"🥀 جارٍ التنزيل... {current * 100 / total:.1f}%")
             except Exception:
                 pass
 
         try:
             local_path = await media.download(progress=progress)
-            await text.edit_text("📤 Uᴘʟᴏᴀᴅɪɴɢ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴘʜ...")
+            await text.edit_text("🥀 جارٍ الرفع إلى السيرفر...")
 
             success, upload_path = upload_file(local_path)
 
             if success:
                 await text.edit_text(
-                    f"🌐 | [ᴜᴘʟᴏᴀᴅᴇᴅ ʟɪɴᴋ]({upload_path})",
+                    f"🥀 | [رابط الملف]({upload_path})",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
-                                    "ᴜᴘʟᴏᴀᴅᴇᴅ ғɪʟᴇ",
+                                    "رابط الملف",
                                     url=upload_path,
                                 )
                             ]
@@ -67,7 +72,7 @@ async def get_link_group(client, message):
                 )
             else:
                 await text.edit_text(
-                    f"ᴀɴ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ ᴡʜɪʟᴇ ᴜᴘʟᴏᴀᴅɪɴɢ ʏᴏᴜʀ ғɪʟᴇ\n{upload_path}"
+                    f"حدث خطأ أثناء الرفع\n{upload_path}"
                 )
 
             try:
@@ -76,7 +81,7 @@ async def get_link_group(client, message):
                 pass
 
         except Exception as e:
-            await text.edit_text(f"❌ Fɪʟᴇ ᴜᴘʟᴏᴀᴅ ғᴀɪʟᴇᴅ\n\n<i>Rᴇᴀsᴏɴ: {e}</i>")
+            await text.edit_text(f"🥀 فشل الرفع\n\n<i>السبب: {e}</i>")
             try:
                 os.remove(local_path)
             except Exception:
@@ -87,20 +92,11 @@ async def get_link_group(client, message):
 
 
 __HELP__ = """
-**ᴛᴇʟᴇɢʀᴀᴘʜ ᴜᴘʟᴏᴀᴅ ʙᴏᴛ ᴄᴏᴍᴍᴀɴᴅs**
+**اوامر الرفع والاستخراج**
 
-ᴜsᴇ ᴛʜᴇsᴇ ᴄᴏᴍᴍᴀɴᴅs ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴍᴇᴅɪᴀ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴘʜ:
+استخدم هذه الأوامر لاستخراج رابط مباشر للوسائط:
 
-- `/tgm`: ᴜᴘʟᴏᴀᴅ ʀᴇᴘʟɪᴇᴅ ᴍᴇᴅɪᴀ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴘʜ.
-- `/tgt`: sᴀᴍᴇ ᴀs `/tgm`.
-- `/telegraph`: sᴀᴍᴇ ᴀs `/tgm`.
-- `/tl`: sᴀᴍᴇ ᴀs `/tgm`.
-
-**ᴇxᴀᴍᴘʟᴇ:**
-- ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴘʜᴏᴛᴏ ᴏʀ ᴠɪᴅᴇᴏ ᴡɪᴛʜ `/tgm` ᴛᴏ ᴜᴘʟᴏᴀᴅ ɪᴛ.
-
-**ɴᴏᴛᴇ:**
-ʏᴏᴜ ᴍᴜsᴛ ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇᴅɪᴀ ғɪʟᴇ ғᴏʀ ᴛʜᴇ ᴜᴘʟᴏᴀᴅ ᴛᴏ ᴡᴏʀᴋ.
+- تلجراف أو رابط : قم بالرد على الصورة أو الملف لاستخراج الرابط.
 """
 
-__MODULE__ = "Tᴇʟᴇɢʀᴀᴘʜ"
+__MODULE__ = "الروابط"
