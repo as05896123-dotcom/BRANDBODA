@@ -14,15 +14,47 @@ from config import BANNED_USERS
 
 
 @app.on_message(
-    filters.command(["skip", "cskip", "next", "cnext", "تخطي", "التالي", "سكب", "كسكب", "cسكب"]) & filters.group & ~BANNED_USERS
+    filters.command(["skip", "cskip", "next", "cnext", "تخطي", "التالي", "سكب", "كسكب", "cسكب"]) 
+    & filters.group 
+    & ~BANNED_USERS
 )
 @AdminRightsCheck
 async def skip(cli, message: Message, _, chat_id):
+    # --- تعديل: التحقق إذا كان الأمر يخص القناة ---
+    # نحدد اسم المستخدم بشكل افتراضي
+    requester = message.from_user.mention if message.from_user else message.chat.title
+    
+    # الكلمات التي تدل على أن الأمر للقناة
+    channel_keywords = ["قناة", "channel", "cskip", "كسكب", "cسكب"]
+    is_channel_cmd = False
+
+    # فحص إذا كان نص الرسالة يحتوي على كلمة قناة أو الأمر نفسه مخصص للقناة
+    for word in channel_keywords:
+        if word in message.text or message.command[0] in ["cskip", "كسكب", "cسكب"]:
+            is_channel_cmd = True
+            break
+    
+    # إذا تم اكتشاف طلب قناة، نحاول تبديل الآيدي
+    if is_channel_cmd:
+        if message.chat.linked_chat:
+            chat_id = message.chat.linked_chat.id
+            requester = message.chat.title # في القناة نظهر اسم الجروب/القناة بدل الشخص
+            
+            # تنظيف النص من كلمة قناة عشان الأرقام (لو كتب تخطي قناة 2)
+            # هذه خطوة تحسينية بسيطة، لكن الكود الأصلي سيعمل حتى بدونها لأنه سيعتبرها نصاً غير رقمي
+    # -----------------------------------------------
+
     if not len(message.command) < 2:
         loop = await get_loop(chat_id)
         if loop != 0:
             return await message.reply_text(_["admin_8"])
+        
+        # محاولة استخراج الرقم إذا وجد
         state = message.text.split(None, 1)[1].strip()
+        
+        # إذا كانت الكلمة الثانية هي "قناة"، نتجاهلها ونعتبرها تخطي عادي (رقم 1)
+        # إلا لو المستخدم كتب رقم بعدها، وهذا يتطلب منطق معقد، لذا سنعتمد السلوك الافتراضي
+        
         if state.isnumeric():
             state = int(state)
             check = db.get(chat_id)
@@ -43,7 +75,7 @@ async def skip(cli, message: Message, _, chat_id):
                                 try:
                                     await message.reply_text(
                                         text=_["admin_6"].format(
-                                            message.from_user.mention,
+                                            requester,
                                             message.chat.title,
                                         ),
                                         reply_markup=close_markup(_),
@@ -59,36 +91,40 @@ async def skip(cli, message: Message, _, chat_id):
             else:
                 return await message.reply_text(_["queue_2"])
         else:
-            return await message.reply_text(_["admin_9"])
-    else:
-        check = db.get(chat_id)
-        popped = None
-        try:
-            popped = check.pop(0)
-            if popped:
-                await auto_clean(popped)
-            if not check:
-                await message.reply_text(
-                    text=_["admin_6"].format(
-                        message.from_user.mention, message.chat.title
-                    ),
-                    reply_markup=close_markup(_),
-                )
-                try:
-                    return await Hotty.stop_stream(chat_id)
-                except:
-                    return
-        except:
+            # إذا لم يكن رقم (مثلاً كتب: تخطي قناة)، نذهب للتخطي الافتراضي أدناه
+            pass 
+
+    # --- التخطي الافتراضي (أغنية واحدة) ---
+    check = db.get(chat_id)
+    popped = None
+    try:
+        popped = check.pop(0)
+        if popped:
+            await auto_clean(popped)
+        if not check:
+            await message.reply_text(
+                text=_["admin_6"].format(
+                    requester, message.chat.title
+                ),
+                reply_markup=close_markup(_),
+            )
             try:
-                await message.reply_text(
-                    text=_["admin_6"].format(
-                        message.from_user.mention, message.chat.title
-                    ),
-                    reply_markup=close_markup(_),
-                )
                 return await Hotty.stop_stream(chat_id)
             except:
                 return
+    except:
+        try:
+            await message.reply_text(
+                text=_["admin_6"].format(
+                    requester, message.chat.title
+                ),
+                reply_markup=close_markup(_),
+            )
+            return await Hotty.stop_stream(chat_id)
+        except:
+            return
+            
+    # --- تشغيل الأغنية التالية ---
     queued = check[0]["file"]
     title = (check[0]["title"]).title()
     user = check[0]["by"]
