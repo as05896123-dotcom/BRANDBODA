@@ -40,3 +40,5 @@ unidecode
 deep-translator
 https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.23.zip
 bing_image_downloader
+g4f
+curl_cffi
