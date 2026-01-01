@@ -4,24 +4,29 @@ from pymongo import MongoClient
 import re
 from BrandrdXMusic import app as Hotty
 
-
+# نمط التحقق من صحة الرابط
 mongo_url_pattern = re.compile(r'mongodb(?:\+srv)?:\/\/[^\s]+')
 
-
-@Hotty.on_message(filters.command("mongochk"))
+@Hotty.on_message(filters.command(["مونجو", "فحص_مونجو", "mongochk"], prefixes=["/", "!", ".", ""]))
 async def mongo_command(client, message: Message):
     if len(message.command) < 2:
-        await message.reply("Please enter your MongoDB URL after the command. Example: /mongochk your_mongodb_url")
+        await message.reply("🥀 **الرجاء إدخال رابط المونجو بجانب الأمر.**\n\nمثال:\n`/مونجو الرابط_هنا`")
         return
 
     mongo_url = message.command[1]
+    
+    # التحقق من صيغة الرابط
     if re.match(mongo_url_pattern, mongo_url):
         try:
-            # Attempt to connect to the MongoDB instance
+            # رسالة انتظار
+            status_msg = await message.reply("🧚 **جـارِ فـحـص الـرابـط...**")
+            
+            # محاولة الاتصال بقاعدة البيانات (مهلة 5 ثواني)
             client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
-            client.server_info()  # Will cause an exception if connection fails
-            await message.reply("𝗠𝗼𝗻𝗴𝗼𝗗𝗕 𝗨𝗥𝗟 𝗶𝘀 𝘃𝗮𝗹𝗶𝗱 𝗮𝗻𝗱 𝗰𝗼𝗻𝗻𝗲𝗰𝘁𝗶𝗼𝗻 𝘀𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹✅")
+            client.server_info()  # سيحدث خطأ هنا إذا لم يتم الاتصال
+            
+            await status_msg.edit("🧚 **رابط المونجو شغال والاتصال نجح !**")
         except Exception as e:
-            await message.reply(f"Failed to connect to MongoDB: {e}")
+            await status_msg.edit(f"🥀 **فشل الاتصال بقاعدة البيانات:**\n\n`{e}`")
     else:
-        await message.reply("𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗠𝗼𝗻𝗴𝗼𝗗𝗕 𝗨𝗥𝗟 𝗳𝗼𝗿𝗺𝗮𝘁💔")
+        await message.reply("🥀 **صيغة رابط المونجو غير صحيحة !**")
