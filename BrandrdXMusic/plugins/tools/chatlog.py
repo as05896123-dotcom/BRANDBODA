@@ -15,13 +15,13 @@ from BrandrdXMusic.core.userbot import Userbot
 from BrandrdXMusic.utils.database import delete_served_chat
 from BrandrdXMusic.utils.database import get_assistant
 
-
+# الروابط الجديدة للصور
 photo = [
-    "https://te.legra.ph/file/758a5cf4598f061f25963.jpg",
-    "https://te.legra.ph/file/30a1dc870bd1a485e3567.jpg",
-    "https://te.legra.ph/file/d585beb2a6b3f553299d2.jpg",
-    "https://te.legra.ph/file/7df9e128dd261de2afd6b.jpg",
-    "https://te.legra.ph/file/f60ebb75ad6f2786efa4e.jpg",
+    "https://files.catbox.moe/wqipfn.jpg",
+    "https://files.catbox.moe/4qhfqw.jpg",
+    "https://files.catbox.moe/b6533n.jpg",
+    "https://files.catbox.moe/b91yyd.jpg",
+    "https://files.catbox.moe/xi3mb1.jpg",
 ]
 
 
@@ -34,15 +34,15 @@ async def join_watcher(_, message):
             if members.id == app.id:
                 count = await app.get_chat_members_count(chat.id)
                 username = (
-                    message.chat.username if message.chat.username else "𝐏ʀɪᴠᴀᴛᴇ 𝐆ʀᴏᴜᴘ"
+                    message.chat.username if message.chat.username else "مـجـمـوعـة خـاصـة"
                 )
                 msg = (
-                    f"**📝𝐌ᴜsɪᴄ 𝐁ᴏᴛ 𝐀ᴅᴅᴇᴅ 𝐈ɴ 𝐀 #𝐍ᴇᴡ_𝐆ʀᴏᴜᴘ**\n\n"
-                    f"**📌𝐂ʜᴀᴛ 𝐍ᴀᴍᴇ:** {message.chat.title}\n"
-                    f"**🍂𝐂ʜᴀᴛ 𝐈ᴅ:** {message.chat.id}\n"
-                    f"**🔐𝐂ʜᴀᴛ 𝐔sᴇʀɴᴀᴍᴇ:** @{username}\n"
-                    f"**📈𝐆ʀᴏᴜᴘ 𝐌ᴇᴍʙᴇʀs:** {count}\n"
-                    f"**🤔𝐀ᴅᴅᴇᴅ 𝐁ʏ:** {message.from_user.mention}"
+                    f"**🥀 تـم تـفـعـيـل الـبـوت فـي مـجـمـوعـة** 🧚‍♀️\n\n"
+                    f"**🤍 الـمـجـمـوعـة :** {message.chat.title}\n"
+                    f"**🤎 الآيـدي :** `{message.chat.id}`\n"
+                    f"**🧚 الـمـعـرف :** @{username}\n"
+                    f"**♥️ الأعـضـاء :** {count}\n"
+                    f"**⚡ بـواسـطـة :** {message.from_user.mention}"
                 )
                 await app.send_photo(
                     LOG_GROUP_ID,
@@ -52,13 +52,15 @@ async def join_watcher(_, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    f"😍𝐀ᴅᴅᴇᴅ 𝐁ʏ😍",
+                                    f"🦋 الـشـخـص الـذي أضـافـنـي 🦋",
                                     url=f"tg://openmessage?user_id={message.from_user.id}",
                                 )
                             ]
                         ]
                     ),
                 )
-                await userbot.join_chat(f"{username}")
+                # محاولة انضمام المساعد (إذا كان الجروب عاماً ولديه يوزر)
+                if message.chat.username:
+                    await userbot.join_chat(f"{message.chat.username}")
     except Exception as e:
         print(f"Error: {e}")
