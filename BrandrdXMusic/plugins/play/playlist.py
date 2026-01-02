@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+import traceback
 from random import randint, choice
 from time import time
 from typing import Dict, List, Union
@@ -85,7 +86,7 @@ async def delete_playlist(chat_id: int, name: str) -> bool:
 
 # --- الأوامر ---
 
-@app.on_message(filters.command(["playlist", "قائمتي", "قائمة التشغيل", "القائمة", "قائمه", "عرض القائمة", "ماي ليست"]) & ~BANNED_USERS)
+@app.on_message(filters.command(["playlist", "قائمتي", "قائمة التشغيل", "القائمة", "قائمه", "عرض القائمة", "ماي ليست"], prefixes=["/", "!", ".", ""]) & ~BANNED_USERS)
 @language
 async def check_playlist(client, message: Message, _):
     emo = choice(HEART_EMOJIS)
@@ -163,7 +164,7 @@ async def get_keyboard(_, user_id):
     return keyboard, count
 
 
-@app.on_message(filters.command(["delplaylist", "حذف القائمة", "حذف من القائمة", "حذف اغنية", "مسح القائمة"]) & ~BANNED_USERS)
+@app.on_message(filters.command(["delplaylist", "حذف القائمة", "حذف من القائمة", "حذف اغنية", "مسح القائمة"], prefixes=["/", "!", ".", ""]) & ~BANNED_USERS)
 @language
 async def del_plist_msg(client, message: Message, _):
     emo = choice(HEART_EMOJIS)
@@ -234,8 +235,11 @@ async def play_playlist(client, CallbackQuery, _):
             CallbackQuery.message.chat.id,
             video,
             streamtype="playlist",
+            forceplay=None,
         )
     except Exception as e:
+        # Debugging info
+        traceback.print_exc()
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else f"حـدث خـطـأ: {ex_type}"
         return await mystic.edit_text(err)
@@ -243,12 +247,11 @@ async def play_playlist(client, CallbackQuery, _):
 
 
 @app.on_message(
-    filters.command(["playplaylist", "vplayplaylist", "تشغيل القائمة", "تشغيل قائمتي", "بلاي ماي ليست", "شغل القائمة"]) & ~BANNED_USERS & filters.group
+    filters.command(["playplaylist", "vplayplaylist", "تشغيل القائمة", "تشغيل قائمتي", "بلاي ماي ليست", "شغل القائمة"], prefixes=["/", "!", ".", ""]) & ~BANNED_USERS & filters.group
 )
 @languageCB
 async def play_playlist_command(client, message, _):
     emo = choice(HEART_EMOJIS)
-    mode = message.command[0][0]
     user_id = message.from_user.id
     _playlist = await get_playlist_names(user_id)
     if not _playlist:
@@ -269,7 +272,10 @@ async def play_playlist_command(client, message, _):
         pass
 
     result = []
-    video = True if mode == "v" else None
+    # تحسين منطق الفيديو
+    cmd = message.command[0].lower()
+    video = True if ("v" in cmd or "فيديو" in cmd) else None
+    
     mystic = await message.reply_text(f"**جـاري بـدء تـشـغـيـل قـائـمـتـك {emo}...**")
 
     for vidids in _playlist:
@@ -286,8 +292,11 @@ async def play_playlist_command(client, message, _):
             message.chat.id,
             video,
             streamtype="playlist",
+            forceplay=None,
         )
     except Exception as e:
+        # Debugging info
+        traceback.print_exc()
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else f"حـدث خـطـأ: {ex_type}"
         return await mystic.edit_text(err)
@@ -296,7 +305,7 @@ async def play_playlist_command(client, message, _):
 
 
 # Combined add_playlist function
-@app.on_message(filters.command(["addplaylist", "اضف للقائمة", "اضافة للقائمة", "حفظ في القائمة", "ادد ليست"]) & ~BANNED_USERS)
+@app.on_message(filters.command(["addplaylist", "اضف للقائمة", "اضافة للقائمة", "حفظ في القائمة", "ادد ليست"], prefixes=["/", "!", ".", ""]) & ~BANNED_USERS)
 @language
 async def add_playlist(client, message: Message, _):
     emo = choice(HEART_EMOJIS)
@@ -665,7 +674,7 @@ async def add_playlists_branded(client, CallbackQuery, _):
         return
 
 
-@app.on_message(filters.command(["delallplaylist", "حذف القائمة كلها", "حذف الكل", "فرمتة القائمة"]) & ~BANNED_USERS)
+@app.on_message(filters.command(["delallplaylist", "حذف القائمة كلها", "حذف الكل", "فرمتة القائمة"], prefixes=["/", "!", ".", ""]) & ~BANNED_USERS)
 @language
 async def delete_all_playlists(client, message, _):
     emo = choice(HEART_EMOJIS)
