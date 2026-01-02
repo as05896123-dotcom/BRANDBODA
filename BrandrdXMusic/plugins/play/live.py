@@ -1,5 +1,5 @@
+import traceback
 from pyrogram import filters
-
 from BrandrdXMusic import YouTube, app
 from BrandrdXMusic.utils.channelplay import get_channeplayCB
 from BrandrdXMusic.utils.decorators.language import languageCB
@@ -66,15 +66,17 @@ async def play_live_stream(client, CallbackQuery, _):
                 video,
                 streamtype="live",
                 forceplay=ffplay,
+                spotify=False, # إضافة مهمة لمنع TypeError
             )
         except Exception as e:
+            traceback.print_exc()
             ex_type = type(e).__name__
             err = e if ex_type == "AssistantErr" else f"حدث خطأ غير متوقع: {ex_type}"
             return await mystic.edit_text(f"**حدث خطأ أثناء التشغيل:**\n{err}")
     else:
         return await mystic.edit_text("» **عذراً، هذا الرابط ليس بثاً مباشراً (Live Stream).**")
     
-    # تنظيف رسالة الانتظار في حال النجاح (يتم التعامل معها داخل دالة الستريم عادة، لكن هذا للأمان)
+    # تنظيف رسالة الانتظار في حال النجاح
     try:
         await mystic.delete()
     except:
