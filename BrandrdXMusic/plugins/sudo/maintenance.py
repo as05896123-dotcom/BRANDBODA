@@ -1,8 +1,6 @@
 import os
-import inspect
 from pyrogram import filters
 from pyrogram.types import Message
-
 from BrandrdXMusic import app
 from config import OWNER_ID
 from BrandrdXMusic.utils.database import (
@@ -14,27 +12,20 @@ from BrandrdXMusic.utils.database import (
     add_off,
 )
 
-# --- دالة ذكية لمعالجة أوامر قاعدة البيانات (Sync/Async) ---
-async def safe_db_call(func, *args, **kwargs):
-    """
-    تقوم هذه الدالة بتنفيذ أوامر قاعدة البيانات سواء كانت تتطلب await أم لا.
-    تحل مشكلة TypeError بشكل نهائي.
-    """
+# --- دالة فحص الصيانة (تعالج مشكلة الـ TypeError تلقائياً) ---
+async def check_maint():
+    """تتأكد من حالة الصيانة سواء كانت الدالة تطلب رقم 1 أم لا"""
     try:
-        # المحاولة الأولى: نعتبرها async ونستخدم await
-        if inspect.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
-        else:
-            # إذا لم تكن async، ننفذها مباشرة
-            result = func(*args, **kwargs)
-            # إذا أرجعت coroutine (في بعض الحالات النادرة)، ننتظره
-            if inspect.isawaitable(result):
-                return await result
-            return result
+        # المحاولة 1: استدعاء فارغ
+        return await is_maintenance()
     except TypeError:
-        # محاولة احتياطية: التشغيل المباشر في حال فشل الفحص
-        return func(*args, **kwargs)
-
+        # المحاولة 2: استدعاء مع رقم 1 (لأن السورس لديك يستخدم IDs)
+        try:
+            return await is_maintenance(1)
+        except Exception:
+            return False
+    except Exception:
+        return False
 # -----------------------------------------------------------
 
 # 1. الحارس (Maintenance Check)
@@ -44,10 +35,7 @@ async def maintenance_check(client, message: Message):
         if not message.text:
             return
             
-        # استخدام الدالة الذكية للفحص
-        is_maint = await safe_db_call(is_maintenance)
-        
-        if is_maint:
+        if await check_maint():
             await message.reply_text(
                 "**الـبـوت فـي وضـع الـصـيـانـة حـالـيـاً**\n\nنـحـن نـعـمـل عـلـى تـحـديـث الـبـوت، يـرجـى الـمـحـاولـة لاحـقـاً."
             )
@@ -62,75 +50,72 @@ async def maintenance(client, message: Message):
     if len(message.command) != 2:
         return await message.reply_text(
             "**طـريـقـة اسـتـخـدام وضـع الـصـيـانـة:**\n\n"
-            "• لـتـفـعـيـل الـصـيـانـة ارسـل: الـصـيـانـة تـفـعـيـل\n"
-            "• لـتـعـطـيـل الـصـيـانـة ارسـل: الـصـيـانـة تـعـطـيـل"
+            "• لـتـفـعـيـل الـصـيـانـة ارسـل: **الصيانة تفعيل**\n"
+            "• لـتـعـطـيـل الـصـيـانـة ارسـل: **الصيانة تعطيل**"
         )
         
     state = message.text.split(None, 1)[1].strip().lower()
     
-    try:
-        if state in ["enable", "تفعيل", "on"]:
-            if await safe_db_call(is_maintenance):
-                await message.reply_text("وضـع الـصـيـانـة مـفـعّـل بـالـفـعـل!")
-            else:
-                await safe_db_call(maintenance_on)
-                await message.reply_text("**تـم تـفـعـيـل وضـع الـصـيـانـة.**\n\nلـن يـسـتـطـيـع الـأعـضـاء اسـتـخـدام الـبـوت حـتـى تـقـوم بـتـعـطـيـلـه.")
-                
-        elif state in ["disable", "تعطيل", "إيقاف", "off"]:
-            if not await safe_db_call(is_maintenance):
-                await message.reply_text("وضـع الـصـيـانـة مـعـطّـل بـالـفـعـل!")
-            else:
-                await safe_db_call(maintenance_off)
-                await message.reply_text("**تـم تـعـطـيـل وضـع الـصـيـانـة.**\n\nيـمـكـن لـلـجـمـيـع اسـتـخـدام الـبـوت الـآن.")
-                
+    # نستخدم دالة الفحص الذكية
+    is_active = await check_maint()
+
+    if state in ["enable", "تفعيل", "on"]:
+        if is_active:
+            await message.reply_text("**وضـع الـصـيـانـة مـفـعّـل بـالـفـعـل!**")
         else:
-            await message.reply_text("أمـر غـيـر صـحـيـح.")
-    except Exception as e:
-         await message.reply_text(f"**حـدث خـطـأ:** {e}")
+            await maintenance_on()
+            await message.reply_text("**تـم تـفـعـيـل وضـع الـصـيـانـة.**\n\nلن يستطيع أحد استخدام البوت غير المطورين.")
+            
+    elif state in ["disable", "تعطيل", "إيقاف", "off"]:
+        if not is_active:
+            await message.reply_text("**وضـع الـصـيـانـة مـعـطّـل بـالـفـعـل!**")
+        else:
+            await maintenance_off()
+            await message.reply_text("**تـم تـعـطـيـل وضـع الـصـيـانـة.**\n\nيمكن للجميع استخدام البوت الآن.")
+            
+    else:
+        await message.reply_text("**أمـر غـيـر صـحـيـح.**")
 
 
-# 3. أوامر السجل (Logger) (للمطور فقط)
+# 3. أوامر السجل (Logger)
 @app.on_message(filters.command(["logger", "السجل"], prefixes=["/", "!", ".", ""]) & filters.user(OWNER_ID))
 async def logger_toggle(client, message: Message):
     if len(message.command) != 2:
         return await message.reply_text(
             "**طـريـقـة اسـتـخـدام إشـعـارات الـسـجـل:**\n\n"
-            "• لـتـفـعـيـل الـسـجـل ارسـل: الـسـجـل تـفـعـيـل\n"
-            "• لـتـعـطـيـل الـسـجـل ارسـل: الـسـجـل تـعـطـيـل"
+            "• لـتـفـعـيـل الـسـجـل ارسـل: **السجل تفعيل**\n"
+            "• لـتـعـطـيـل الـسـجـل ارسـل: **السجل تعطيل**"
         )
 
     state = message.text.split(None, 1)[1].strip().lower()
     
     try:
         if state in ["enable", "تفعيل", "on"]:
-            if await safe_db_call(is_on_off, 2):
-                await message.reply_text("إشـعـارات الـسـجـل مـفـعّـلـة بـالـفـعـل!")
+            if await is_on_off(2):
+                await message.reply_text("**إشـعـارات الـسـجـل مـفـعّـلـة بـالـفـعـل!**")
             else:
-                await safe_db_call(add_on, 2)
-                await message.reply_text("**تـم تـفـعـيـل إشـعـارات الـسـجـل.**\n\nسـيـتـم إرسـال تـقـاريـر الـتـشـغـيـل إلـى جـروب الـسـجـل.")
+                await add_on(2)
+                await message.reply_text("**تـم تـفـعـيـل إشـعـارات الـسـجـل.**")
 
         elif state in ["disable", "تعطيل", "off"]:
-            if not await safe_db_call(is_on_off, 2):
-                await message.reply_text("إشـعـارات الـسـجـل مـعـطّـلـة بـالـفـعـل!")
+            if not await is_on_off(2):
+                await message.reply_text("**إشـعـارات الـسـجـل مـعـطّـلـة بـالـفـعـل!**")
             else:
-                await safe_db_call(add_off, 2)
+                await add_off(2)
                 await message.reply_text("**تـم تـعـطـيـل إشـعـارات الـسـجـل.**")
         else:
-            await message.reply_text("أمـر غـيـر صـحـيـح.")
+            await message.reply_text("**أمـر غـيـر صـحـيـح.**")
     except Exception as e:
-        await message.reply_text(f"**حـدث خـطـأ:** {e}")
+        await message.reply_text(f"**حدث خطأ:** {e}")
 
 
-# 4. أمر سحب ملف السجل (Logs File)
+# 4. أمر سحب ملف السجل
 @app.on_message(filters.command(["logs", "ملف السجل"], prefixes=["/", "!", ".", ""]) & filters.user(OWNER_ID))
 async def get_log_file(client, message: Message):
     try:
         if os.path.exists("log.txt"):
-            await message.reply_document(
-                document="log.txt",
-                caption="**تـم سـحـب مـلـف الـسـجـلـات (Logs) بـنـجـاح.**"
-            )
+            await message.reply_document(document="log.txt", caption="**سـجـلات الـبـوت**")
         else:
-            await message.reply_text("**لا يـوجـد مـلـف سـجـلـات حـالـيـاً.**")
+            await message.reply_text("**لا يـوجـد مـلـف سـجـلـات.**")
     except Exception as e:
-        await message.reply_text(f"**حـدث خـطـأ:** {e}")
+        await message.reply_text(f"خطأ: {e}")
