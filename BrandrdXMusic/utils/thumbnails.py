@@ -6,6 +6,21 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
+# دالة ذكية للبحث عن الخطوط في ملفاتك
+def get_font(size):
+    # قائمة المسارات المحتملة للخط بناءً على صورتك
+    possible_fonts = [
+        "BrandrdXMusic/font.ttf",
+        "BrandrdXMusic/assets/font.ttf",
+        "font.ttf",
+        "assets/font.ttf"
+    ]
+    for font_path in possible_fonts:
+        if os.path.isfile(font_path):
+            return ImageFont.truetype(font_path, size)
+    # إذا لم يجد الخط يستخدم الافتراضي
+    return ImageFont.load_default()
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 1. دالة الرسم والتصميم (Vinyl Style)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -69,15 +84,12 @@ async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         d_glass.rounded_rectangle((0,0,cw,ch), radius=60, fill=(255,255,255,15), outline=(255,255,255,50), width=2)
         bg.paste(glass, (cx, cy), glass)
 
-        # النصوص
+        # النصوص (استخدام دالة البحث عن الخط)
         d = ImageDraw.Draw(bg)
-        try:
-            # محاولة تحميل الخطوط، إذا فشل يستخدم الافتراضي
-            f_title = ImageFont.truetype("assets/font.ttf", 55)
-            f_sub = ImageFont.truetype("assets/font.ttf", 35)
-            f_small = ImageFont.truetype("assets/font.ttf", 28)
-        except:
-            f_title = f_sub = f_small = ImageFont.load_default()
+        
+        f_title = get_font(55)
+        f_sub = get_font(35)
+        f_small = get_font(28)
 
         if len(title) > 30: title = title[:30] + "..."
         
@@ -129,8 +141,7 @@ async def gen_thumb(videoid, user_id):
             except:
                 duration = "Unknown"
             
-            # === ⚠️ هنا الإصلاح الحقيقي ⚠️ ===
-            # أخذنا الرابط كاملاً وحذفنا .split("?")[0]
+            # الرابط الصحيح
             thumbnail = result["thumbnails"][0]["url"]
 
             try:
