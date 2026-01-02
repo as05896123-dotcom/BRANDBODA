@@ -55,9 +55,15 @@ async def del_back_playlist(client, CallbackQuery, _):
         chat = bet[0]
         counter = bet[1]
     chat_id = int(chat)
+    
     if not await is_active_chat(chat_id):
         return await CallbackQuery.answer(_["general_5"], show_alert=True)
+    
     mention = CallbackQuery.from_user.mention
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  منطق التصويت (UpVote)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if command == "UpVote":
         if chat_id not in votemode:
             votemode[chat_id] = {}
@@ -82,8 +88,10 @@ async def del_back_playlist(client, CallbackQuery, _):
                 CallbackQuery.from_user.id
             )
             votemode[chat_id][CallbackQuery.message.id] += 1
+        
         upvote = await get_upvote_count(chat_id)
         get_upvotes = int(votemode[chat_id][CallbackQuery.message.id])
+        
         if get_upvotes >= upvote:
             votemode[chat_id][CallbackQuery.message.id] = upvote
             try:
@@ -105,10 +113,7 @@ async def del_back_playlist(client, CallbackQuery, _):
             command = counter
             mention = "تــصــويــتــات"
         else:
-            if (
-                CallbackQuery.from_user.id
-                in upvoters[chat_id][CallbackQuery.message.id]
-            ):
+            if CallbackQuery.from_user.id in upvoters[chat_id][CallbackQuery.message.id]:
                 await CallbackQuery.answer(_["admin_38"], show_alert=True)
             else:
                 await CallbackQuery.answer(_["admin_39"], show_alert=True)
@@ -124,6 +129,10 @@ async def del_back_playlist(client, CallbackQuery, _):
             )
             await CallbackQuery.answer(_["admin_40"], show_alert=True)
             return await CallbackQuery.edit_message_reply_markup(reply_markup=upl)
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  التحقق من صلاحيات الأدمن
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     else:
         is_non_admin = await is_nonadmin_chat(CallbackQuery.message.chat.id)
         if not is_non_admin:
@@ -136,6 +145,10 @@ async def del_back_playlist(client, CallbackQuery, _):
                         return await CallbackQuery.answer(
                             _["admin_14"], show_alert=True
                         )
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  أوامر التحكم (Pause, Resume, Stop, Skip)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if command == "Pause":
         if not await is_music_playing(chat_id):
             return await CallbackQuery.answer(_["admin_1"], show_alert=True)
@@ -145,6 +158,7 @@ async def del_back_playlist(client, CallbackQuery, _):
         await CallbackQuery.message.reply_text(
             _["admin_2"].format(mention), reply_markup=close_markup(_)
         )
+
     elif command == "Resume":
         if await is_music_playing(chat_id):
             return await CallbackQuery.answer(_["admin_3"], show_alert=True)
@@ -154,6 +168,7 @@ async def del_back_playlist(client, CallbackQuery, _):
         await CallbackQuery.message.reply_text(
             _["admin_4"].format(mention), reply_markup=close_markup(_)
         )
+
     elif command == "Stop" or command == "End":
         await CallbackQuery.answer()
         await Hotty.stop_stream(chat_id)
@@ -161,47 +176,43 @@ async def del_back_playlist(client, CallbackQuery, _):
         await CallbackQuery.message.reply_text(
             _["admin_5"].format(mention), reply_markup=close_markup(_)
         )
-        await CallbackQuery.message.delete()
+        try:
+            await CallbackQuery.message.delete()
+        except:
+            pass
+
     elif command == "Skip" or command == "Replay":
         check = db.get(chat_id)
+        if not check:
+            return await Hotty.stop_stream(chat_id)
+            
         if command == "Skip":
             txt = f"تــم تــخــطــي الــتــشــغــيــل \n\nبــواســطــة : {mention}"
-            popped = None
             try:
-                popped = check.pop(0)
-                if popped:
-                    await auto_clean(popped)
+                # حذف الأغنية الحالية فقط إذا كان هناك قائمة
+                if len(check) > 0:
+                    popped = check.pop(0)
+                    if popped:
+                        await auto_clean(popped)
+                
+                # إذا أصبحت القائمة فارغة بعد الحذف
                 if not check:
-                    await CallbackQuery.edit_message_text(
-                        f"تــم تــخــطــي الــتــشــغــيــل \n\nبــواســطــة : {mention}"
-                    )
+                    await CallbackQuery.edit_message_text(f"تــم تــخــطــي الــتــشــغــيــل \n\nبــواســطــة : {mention}")
                     await CallbackQuery.message.reply_text(
-                        text=_["admin_6"].format(
-                            mention, CallbackQuery.message.chat.title
-                        ),
-                        reply_markup=close_markup(_),
-                    )
-                    try:
-                        return await Hotty.stop_stream(chat_id)
-                    except:
-                        return
-            except:
-                try:
-                    await CallbackQuery.edit_message_text(
-                        f"تــم تــخــطــي الــتــشــغــيــل \n\nبــواســطــة : {mention}"
-                    )
-                    await CallbackQuery.message.reply_text(
-                        text=_["admin_6"].format(
-                            mention, CallbackQuery.message.chat.title
-                        ),
+                        text=_["admin_6"].format(mention, CallbackQuery.message.chat.title),
                         reply_markup=close_markup(_),
                     )
                     return await Hotty.stop_stream(chat_id)
-                except:
-                    return
+            except Exception as e:
+                # في حالة حدوث خطأ، نوقف التشغيل بأمان
+                print(f"Skip Error: {e}")
+                return await Hotty.stop_stream(chat_id)
         else:
             txt = f"تــم إعــادة الــتــشــغــيــل \n\nبــواســطــة : {mention}"
+
         await CallbackQuery.answer()
+        
+        # تجهيز الأغنية التالية
         queued = check[0]["file"]
         title = (check[0]["title"]).title()
         user = check[0]["by"]
@@ -209,13 +220,19 @@ async def del_back_playlist(client, CallbackQuery, _):
         streamtype = check[0]["streamtype"]
         videoid = check[0]["vidid"]
         status = True if str(streamtype) == "video" else None
+        
+        # إعادة تعيين عداد الوقت
         db[chat_id][0]["played"] = 0
+        
+        # التعامل مع المدة الزمنية القديمة (للملفات المحلية)
         exis = (check[0]).get("old_dur")
         if exis:
             db[chat_id][0]["dur"] = exis
             db[chat_id][0]["seconds"] = check[0]["old_second"]
             db[chat_id][0]["speed_path"] = None
             db[chat_id][0]["speed"] = 1.0
+
+        # منطق تشغيل الأنواع المختلفة (Live, Video, File)
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
@@ -231,6 +248,7 @@ async def del_back_playlist(client, CallbackQuery, _):
                 await Hotty.skip_stream(chat_id, link, video=status, image=image)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
+            
             button = stream_markup2(_, chat_id)
             img = await get_thumb(videoid)
             run = await CallbackQuery.message.reply_photo(
@@ -246,6 +264,7 @@ async def del_back_playlist(client, CallbackQuery, _):
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
+
         elif "vid_" in queued:
             mystic = await CallbackQuery.message.reply_text(
                 _["call_7"], disable_web_page_preview=True
@@ -267,6 +286,7 @@ async def del_back_playlist(client, CallbackQuery, _):
                 await Hotty.skip_stream(chat_id, file_path, video=status, image=image)
             except:
                 return await mystic.edit_text(_["call_6"])
+            
             button = stream_markup(_, videoid, chat_id)
             img = await get_thumb(videoid)
             run = await CallbackQuery.message.reply_photo(
@@ -283,11 +303,13 @@ async def del_back_playlist(client, CallbackQuery, _):
             db[chat_id][0]["markup"] = "stream"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
             await mystic.delete()
+
         elif "index_" in queued:
             try:
                 await Hotty.skip_stream(chat_id, videoid, video=status)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
+            
             button = stream_markup2(_, chat_id)
             run = await CallbackQuery.message.reply_photo(
                 photo=STREAM_IMG_URL,
@@ -297,7 +319,9 @@ async def del_back_playlist(client, CallbackQuery, _):
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
+
         else:
+            # تشغيل الملفات العادية (يوتيوب صوت أو روابط)
             if videoid == "telegram":
                 image = None
             elif videoid == "soundcloud":
@@ -311,6 +335,7 @@ async def del_back_playlist(client, CallbackQuery, _):
                 await Hotty.skip_stream(chat_id, queued, video=status, image=image)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
+            
             if videoid == "telegram":
                 button = stream_markup2(_, chat_id)
                 run = await CallbackQuery.message.reply_photo(
@@ -355,6 +380,9 @@ async def del_back_playlist(client, CallbackQuery, _):
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  تحديث الأزرار وشريط الوقت تلقائياً
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def markup_timer():
     while not await asyncio.sleep(1):
         active_chats = await get_active_chats()
@@ -374,8 +402,8 @@ async def markup_timer():
                 except:
                     continue
                 try:
-                    check = checker[chat_id][mystic.id]
-                    if check is False:
+                    check = checker.get(chat_id)
+                    if check and check.get(mystic.id) is False:
                         continue
                 except:
                     pass
