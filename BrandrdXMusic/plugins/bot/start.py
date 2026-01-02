@@ -40,11 +40,14 @@ async def start_pm(client, message: Message, _):
             )
         if name[0:3] == "sud":
             await sudoers_list(client=client, message=message, _=_)
-            if await is_on_off(2):
-                return await app.send_message(
-                    chat_id=config.LOGGER_ID,
-                    text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **قـائـمـة الـمـطـوريـن**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
-                )
+            try:
+                if await is_on_off(2):
+                    return await app.send_message(
+                        chat_id=config.LOGGER_ID,
+                        text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **قـائـمـة الـمـطـوريـن**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
+                    )
+            except:
+                pass
             return
         if name[0:3] == "inf":
             m = await message.reply_text("🔎")
@@ -78,16 +81,20 @@ async def start_pm(client, message: Message, _):
                 caption=searched_text,
                 reply_markup=key,
             )
-            if await is_on_off(2):
-                return await app.send_message(
-                    chat_id=config.LOGGER_ID,
-                    text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **مـعـلـومـات الـمـقـطـع**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
-                )
+            try:
+                if await is_on_off(2):
+                    return await app.send_message(
+                        chat_id=config.LOGGER_ID,
+                        text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **مـعـلـومـات الـمـقـطـع**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
+                    )
+            except:
+                pass
     else:
 
         try:
             out = private_panel(_)
-            # الجزء الأول: الترحيب (تم إضافة فواصل زمنية هنا)
+            
+            # --- بداية الانيميشن البطيء ---
             lol = await message.reply_text("اهـلاً بـك عـزيـزي ♡ {}.. 🥀".format(message.from_user.mention))
             await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💞".format(message.from_user.mention))
@@ -103,7 +110,6 @@ async def start_pm(client, message: Message, _):
                
             await lol.delete()
             
-            # الجزء الثاني: جاري التشغيل (تم تبطيء السرعة من 0.1 إلى 0.5)
             lols = await message.reply_text("**💝 جـ**")
             await asyncio.sleep(0.5)
             await lols.edit_text("🥀 جـارِ")        
@@ -123,40 +129,56 @@ async def start_pm(client, message: Message, _):
 
             await lols.edit_text("**🥀 تـم الـتـشـغـيـل**")
             await asyncio.sleep(0.5)
-
             await lols.edit_text("**💞 تـم الـتـشـغـيـل**")
             await asyncio.sleep(0.5)
             await lols.edit_text("**🤍 تـم الـتـشـغـيـل**")
-            
+            # --- نهاية الانيميشن ---
+
             m = await message.reply_sticker("CAACAgUAAxkBAAM3aVdeWEHOfLJDs5xQlbanyV-qnwYAAgsVAAL68RlUwGZYcJD6wm4eBA")
             
+            # --- إصلاح مشكلة الصورة (الحل النهائي) ---
+            # نجعل الافتراضي هو صورة البوت
+            chat_photo = config.START_IMG_URL
+            
+            # نحاول تحميل صورة العضو، لو فشل يظل على صورة البوت
             if message.chat.photo:
-                userss_photo = await app.download_media(
-                    message.chat.photo.big_file_id,
-                )
-            else:
-                userss_photo = "assets/nodp.png"
-            if userss_photo:
-                chat_photo = userss_photo
-            chat_photo = userss_photo if userss_photo else config.START_IMG_URL
+                try:
+                    userss_photo = await app.download_media(message.chat.photo.big_file_id)
+                    if userss_photo:
+                        chat_photo = userss_photo
+                except:
+                    # في حالة الفشل نستخدم صورة البوت
+                    chat_photo = config.START_IMG_URL
 
-        except AttributeError:
-            chat_photo = "assets/nodp.png"
+        except Exception as e:
+            # أي خطأ آخر، نستخدم صورة البوت
+            chat_photo = config.START_IMG_URL
+            print(f"Error in start animation: {e}")
         
-        await lols.delete()
-        await m.delete()
+        # تنظيف الرسائل القديمة
+        try:
+            await lols.delete()
+            await m.delete()
+        except:
+            pass
+
+        # إرسال رسالة الترحيب النهائية (مضمونة الآن)
         await message.reply_photo(
             photo=chat_photo,
             caption=_["start_2"].format(message.from_user.mention, app.mention),
             reply_markup=InlineKeyboardMarkup(out),
         )
-        if await is_on_off(config.LOG):
-            sender_id = message.from_user.id
-            sender_name = message.from_user.first_name
-            return await app.send_message(
-                config.LOGGER_ID,
-                f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {sender_id}\n**الـاسـم : {sender_name}",
-            )          
+
+        try:
+            if config.LOGGER_ID:
+                sender_id = message.from_user.id
+                sender_name = message.from_user.first_name
+                await app.send_message(
+                    config.LOGGER_ID,
+                    f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {sender_id}\n**الـاسـم : {sender_name}",
+                )
+        except:
+            pass
 
 @app.on_message(filters.command(["start"], prefixes=["/", "!", ".", ""]) & filters.group & ~BANNED_USERS)
 @LanguageStart
