@@ -1,17 +1,16 @@
 import os
-from os import path
 import yt_dlp
+from BrandrdXMusic import LOGGER
 
 def download(url: str, my_hook) -> str:
-    # تـحـديـد مـسـار مـلـف الـكـوكـيـز داخـل الـمـجـلـد
-    cookie_path = "cookies/BrandedXMusic.txt"
-    
-    # الـتـحـقـق مـن وجـود الـمـلـف لـضـمـان الـعـمـل
-    if os.path.isfile(cookie_path):
-        active_cookie = cookie_path
+    # البحث عن ملف الكوكيز (جربنا الاسمين لضمان العمل)
+    if os.path.isfile("cookies/cookies.txt"):
+        active_cookie = "cookies/cookies.txt"
+    elif os.path.isfile("cookies/BrandrdXMusic.txt"):
+        active_cookie = "cookies/BrandrdXMusic.txt"
     else:
         active_cookie = None
-        print(f"تـنـبـيـه: لـم يـتـم الـعـثـور عـلـى الـكـوكـيـز فـي: {cookie_path}")
+        LOGGER(__name__).warning("لم يتم العثور على ملف الكوكيز. قد تفشل بعض روابط يوتيوب.")
 
     ydl_opts = {
         "format": "bestaudio/best",
@@ -21,16 +20,19 @@ def download(url: str, my_hook) -> str:
         "quiet": True,
         "no_warnings": True,
         "cookiefile": active_cookie,
+        "source_address": "0.0.0.0", # يساعد في تجنب مشاكل الآي بي
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.add_progress_hook(my_hook)
-            # بـدء عـمـلـيـة الـتـحـمـيـل واسـتـخـراج الـبـيـانـات
+            
+            # بـدء عـمـلـيـة الـتـحـمـيـل
             info = ydl.extract_info(url, download=True)
-            # إرجـاع الـمـسـار الـحـقـيـقـي لـلـمـلـف الـمـحـمـل
+            
+            # إرجـاع الـمـسـار الـحـقـيـقـي لـلـمـلـف
             return ydl.prepare_filename(info)
             
     except Exception as e:
-        print(f"خـطـأ أثـنـاء الـتـحـمـيـل: {e}")
+        LOGGER(__name__).error(f"فشل التحميل عبر Yt-Dlp: {e}")
         return None
