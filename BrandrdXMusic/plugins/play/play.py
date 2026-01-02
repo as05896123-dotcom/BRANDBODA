@@ -32,7 +32,7 @@ from config import BANNED_USERS, lyrical
             "play", "vplay", "cplay", "cvplay", "playforce", "vplayforce", "cplayforce", "cvplayforce",
             "شغل", "تشغيل", "فيديو", "فيد", "سمعني", "قناة"
         ],
-        prefixes=["/", "!", ".", ""] # يعمل بدون علامات
+        prefixes=["/", "!", ".", ""] 
     )
     & filters.group
     & ~BANNED_USERS
@@ -51,6 +51,17 @@ async def play_commnd(
     *args,
     **kwargs
 ):
+    # --- 1. حل مشكلة المشرف المخفي (Anonymous Admin) ---
+    if message.sender_chat and message.sender_chat.id == message.chat.id:
+        user_id = message.chat.id
+        user_name = message.chat.title
+    elif message.from_user:
+        user_id = message.from_user.id
+        user_name = message.from_user.first_name
+    else:
+        # حالة نادرة، نتجاوزها
+        return
+
     command = message.command[0].lower()
     if any(x in command for x in ["v", "فيديو", "فيد"]):
         video = True
@@ -64,8 +75,8 @@ async def play_commnd(
     slider = None
     plist_type = None
     spotify = None
-    user_id = message.from_user.id
-    user_name = message.from_user.first_name
+    
+    # تعريف المتغيرات من الرسائل المردود عليها
     audio_telegram = (
         (message.reply_to_message.audio or message.reply_to_message.voice)
         if message.reply_to_message
@@ -77,7 +88,7 @@ async def play_commnd(
         else None
     )
     
-    # --- قسم تشغيل الملفات من التيليجرام (صوت) ---
+    # --- تشغيل ملفات تيليجرام (صوت) ---
     if audio_telegram:
         if audio_telegram.file_size > 104857600:
             return await mystic.edit_text(_["play_5"])
@@ -99,6 +110,7 @@ async def play_commnd(
             }
 
             try:
+                # تم حذف spotify و forceplay لمنع TypeError
                 await stream(
                     _,
                     mystic,
@@ -108,8 +120,6 @@ async def play_commnd(
                     user_name,
                     message.chat.id,
                     streamtype="telegram",
-                    forceplay=fplay,
-                    spotify=False, # إصلاح TypeError بإضافة هذا
                 )
             except Exception as e:
                 traceback.print_exc()
@@ -119,7 +129,7 @@ async def play_commnd(
             return await mystic.delete()
         return
 
-    # --- قسم تشغيل الملفات من التيليجرام (فيديو) ---
+    # --- تشغيل ملفات تيليجرام (فيديو) ---
     elif video_telegram:
         if message.reply_to_message.document:
             try:
@@ -146,6 +156,7 @@ async def play_commnd(
                 "dur": dur,
             }
             try:
+                # تم حذف spotify و forceplay لمنع TypeError
                 await stream(
                     _,
                     mystic,
@@ -156,8 +167,6 @@ async def play_commnd(
                     message.chat.id,
                     video=True,
                     streamtype="telegram",
-                    forceplay=fplay,
-                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
                 traceback.print_exc()
@@ -167,7 +176,7 @@ async def play_commnd(
             return await mystic.delete()
         return
 
-    # --- قسم تشغيل الروابط ---
+    # --- تشغيل الروابط ---
     elif url:
         if await YouTube.exists(url):
             if "playlist" in url:
@@ -175,7 +184,7 @@ async def play_commnd(
                     details = await YouTube.playlist(
                         url,
                         config.PLAYLIST_FETCH_LIMIT,
-                        message.from_user.id,
+                        user_id, # استخدام المتغير الآمن
                     )
                 except:
                     return await mystic.edit_text(_["play_3"])
@@ -220,7 +229,7 @@ async def play_commnd(
                 streamtype = "playlist"
                 plist_type = "spplay"
                 img = config.SPOTIFY_PLAYLIST_IMG_URL
-                cap = _["play_11"].format(app.mention, message.from_user.mention)
+                cap = _["play_11"].format(app.mention, user_name)
             elif "album" in url:
                 try:
                     details, plist_id = await Spotify.album(url)
@@ -229,7 +238,7 @@ async def play_commnd(
                 streamtype = "playlist"
                 plist_type = "spalbum"
                 img = config.SPOTIFY_ALBUM_IMG_URL
-                cap = _["play_11"].format(app.mention, message.from_user.mention)
+                cap = _["play_11"].format(app.mention, user_name)
             elif "artist" in url:
                 try:
                     details, plist_id = await Spotify.artist(url)
@@ -238,7 +247,7 @@ async def play_commnd(
                 streamtype = "playlist"
                 plist_type = "spartist"
                 img = config.SPOTIFY_ARTIST_IMG_URL
-                cap = _["play_11"].format(message.from_user.first_name)
+                cap = _["play_11"].format(user_name)
             else:
                 return await mystic.edit_text(_["play_15"])
         elif await Apple.valid(url):
@@ -258,7 +267,7 @@ async def play_commnd(
                     return await mystic.edit_text(_["play_3"])
                 streamtype = "playlist"
                 plist_type = "apple"
-                cap = _["play_12"].format(app.mention, message.from_user.mention)
+                cap = _["play_12"].format(app.mention, user_name)
                 img = url
             else:
                 return await mystic.edit_text(_["play_3"])
@@ -284,6 +293,7 @@ async def play_commnd(
                     )
                 )
             try:
+                # تم حذف spotify و forceplay لمنع TypeError
                 await stream(
                     _,
                     mystic,
@@ -293,8 +303,6 @@ async def play_commnd(
                     user_name,
                     message.chat.id,
                     streamtype="soundcloud",
-                    forceplay=fplay,
-                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
                 traceback.print_exc()
@@ -315,18 +323,17 @@ async def play_commnd(
                 return await mystic.edit_text(_["general_2"].format(type(e).__name__))
             await mystic.edit_text(_["str_2"])
             try:
+                # تم حذف spotify و forceplay لمنع TypeError
                 await stream(
                     _,
                     mystic,
-                    message.from_user.id,
+                    user_id,
                     url,
                     chat_id,
-                    message.from_user.first_name,
+                    user_name,
                     message.chat.id,
                     video=video,
                     streamtype="index",
-                    forceplay=fplay,
-                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
                 traceback.print_exc()
@@ -350,6 +357,8 @@ async def play_commnd(
         except:
             return await mystic.edit_text(_["play_3"])
         streamtype = "youtube"
+    
+    # --- وضع التشغيل المباشر ---
     if str(playmode) == "Direct":
         if not plist_type:
             if details["duration_min"]:
@@ -372,6 +381,7 @@ async def play_commnd(
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
         try:
+            # تم حذف spotify و forceplay لمنع TypeError
             await stream(
                 _,
                 mystic,
@@ -382,8 +392,6 @@ async def play_commnd(
                 message.chat.id,
                 video=video,
                 streamtype=streamtype,
-                spotify=spotify,
-                forceplay=fplay,
             )
         except Exception as e:
             traceback.print_exc()
@@ -401,7 +409,7 @@ async def play_commnd(
             buttons = playlist_markup(
                 _,
                 ran_hash,
-                message.from_user.id,
+                user_id,
                 plist_type,
                 "c" if channel else "g",
                 "f" if fplay else "d",
@@ -418,7 +426,7 @@ async def play_commnd(
                 buttons = slider_markup(
                     _,
                     track_id,
-                    message.from_user.id,
+                    user_id,
                     query,
                     0,
                     "c" if channel else "g",
@@ -438,7 +446,7 @@ async def play_commnd(
                 buttons = track_markup(
                     _,
                     track_id,
-                    message.from_user.id,
+                    user_id,
                     "c" if channel else "g",
                     "f" if fplay else "d",
                 )
@@ -457,6 +465,7 @@ async def play_music(client, CallbackQuery, _):
     callback_data = CallbackQuery.data.strip()
     callback_request = callback_data.split(None, 1)[1]
     vidid, user_id, mode, cplay, fplay = callback_request.split("|")
+    
     if CallbackQuery.from_user.id != int(user_id):
         try:
             return await CallbackQuery.answer(_["playcb_1"], show_alert=True)
@@ -499,8 +508,9 @@ async def play_music(client, CallbackQuery, _):
             reply_markup=InlineKeyboardMarkup(buttons),
         )
     video = True if mode == "v" else None
-    ffplay = True if fplay == "f" else None
+    
     try:
+        # تم حذف spotify و forceplay لمنع TypeError
         await stream(
             _,
             mystic,
@@ -511,8 +521,6 @@ async def play_music(client, CallbackQuery, _):
             CallbackQuery.message.chat.id,
             video,
             streamtype="youtube",
-            forceplay=ffplay,
-            spotify=False, # إصلاح
         )
     except Exception as e:
         traceback.print_exc()
@@ -560,9 +568,8 @@ async def play_playlists_command(client, CallbackQuery, _):
     videoid = lyrical.get(videoid)
     video = True if mode == "v" else None
     ffplay = True if fplay == "f" else None
-    spotify = True
+    
     if ptype == "yt":
-        spotify = False
         try:
             result = await YouTube.playlist(
                 videoid,
@@ -593,6 +600,7 @@ async def play_playlists_command(client, CallbackQuery, _):
         except:
             return await mystic.edit_text(_["play_3"])
     try:
+        # تم حذف spotify و forceplay لمنع TypeError
         await stream(
             _,
             mystic,
@@ -603,8 +611,6 @@ async def play_playlists_command(client, CallbackQuery, _):
             CallbackQuery.message.chat.id,
             video,
             streamtype="playlist",
-            spotify=spotify,
-            forceplay=ffplay,
         )
     except Exception as e:
         traceback.print_exc()
