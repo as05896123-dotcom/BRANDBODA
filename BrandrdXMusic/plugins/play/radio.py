@@ -25,7 +25,7 @@ from BrandrdXMusic.utils.database import (
 from BrandrdXMusic.utils.logger import play_logs
 from BrandrdXMusic.utils.stream.stream import stream
 
-# تم تحديث الأسماء (القرآن الكريم) والروابط
+# الروابط والمحطات
 RADIO_STATION = {
     "القرآن الكريم": "https://stream.radiojar.com/8s5u5tpdtwzuv",
     "نجوم اف ام": "https://ssl.mz-audiostreaming.com/nogoumfm",
@@ -43,11 +43,55 @@ valid_stations = "\n".join([f"`{name}`" for name in sorted(RADIO_STATION.keys())
 
 
 @app.on_message(
-    filters.command(["radioplayforce", "radio", "cradio", "راديو"])
+    filters.command(
+        ["radioplayforce", "radio", "cradio", "راديو"],
+        prefixes=["/", "!", ".", ""]
+    )
     & filters.group
     & ~BANNED_USERS
 )
 async def radio(client, message: Message):
+    # ==================================================================
+    # 1. منطق جلب الاسم والآيدي (كي لا يخطئ البوت)
+    # ==================================================================
+    
+    # تعريف المتغيرات فارغة في البداية
+    user_id = None
+    user_name = None
+    is_admin = False
+
+    if message.sender_chat and message.sender_chat.id == message.chat.id:
+        # الحالة 1: المشرف المخفي (Anonymous Admin)
+        # نستخدم اسم المجموعة وآيدي المجموعة كبديل لبيانات المستخدم
+        user_id = message.chat.id
+        user_name = message.chat.title 
+        is_admin = True # المشرف المخفي هو أدمن بالتأكيد
+        
+    elif message.from_user:
+        # الحالة 2: مستخدم عادي / مشرف بحسابه الحقيقي
+        user_id = message.from_user.id
+        user_name = message.from_user.first_name
+        
+        # التحقق من أن هذا المستخدم مشرف أو مطور
+        admins = adminlist.get(message.chat.id)
+        if not admins:
+            is_admin = False # القائمة غير محملة بعد
+        else:
+            if user_id in admins or user_id in SUDOERS:
+                is_admin = True
+    else:
+        # حالة نادرة جداً
+        return
+
+    # ==================================================================
+    # 2. التحقق من الصلاحية (للمشرفين فقط)
+    # ==================================================================
+    if not is_admin:
+        return await message.reply_text("🚫 **عذراً، هذا الأمر للمشرفين فقط.**")
+
+    # ==================================================================
+    # 3. التأكد من وجود المساعد (Assistant) في المجموعة
+    # ==================================================================
     msg = await message.reply_text("جـارِ الاتـصـال بـالـبـث الـمـبـاشـر...")
     try:
         try:
@@ -127,6 +171,9 @@ async def radio(client, message: Message):
             pass
     await msg.delete()
     
+    # ==================================================================
+    # 4. اختيار المحطة وتشغيلها
+    # ==================================================================
     if len(message.command) < 2:
         return await message.reply(
             f"**الـرجـاء اخـتـيـار إذاعـة لـتـشـغـيـلـهـا:**\n\n{valid_stations}\n\n**مـثـال:**\n`راديو القرآن الكريم`"
@@ -149,16 +196,7 @@ async def radio(client, message: Message):
         RADIO_URL = RADIO_STATION[target_station]
         language = await get_lang(message.chat.id)
         _ = get_string(language)
-        playmode = await get_playmode(message.chat.id)
-        playty = await get_playtype(message.chat.id)
-        if playty != "Everyone":
-            if message.from_user.id not in SUDOERS:
-                admins = adminlist.get(message.chat.id)
-                if not admins:
-                    return await message.reply_text(_["admin_18"])
-                else:
-                    if message.from_user.id not in admins:
-                        return await message.reply_text(_["play_4"])
+        
         if message.command[0][0] == "c":
             chat_id = await get_cmode(message.chat.id)
             if chat_id is None:
@@ -177,16 +215,20 @@ async def radio(client, message: Message):
             _["play_2"].format(channel) if channel else _["play_1"]
         )
         try:
+            # هنا نستخدم user_id و user_name اللذين حددناهما في الخطوة 1
+            # بدلاً من message.from_user الذي قد يسبب الخطأ
             await stream(
                 _,
                 mystic,
-                message.from_user.id,
+                user_id,         # تم التعديل
                 RADIO_URL,
                 chat_id,
-                message.from_user.mention,
+                user_name,       # تم التعديل
                 message.chat.id,
                 video=video,
                 streamtype="index",
+                forceplay=None,  # إصلاح TypeError
+                spotify=False,   # إصلاح TypeError
             )
         except Exception as e:
             ex_type = type(e).__name__
