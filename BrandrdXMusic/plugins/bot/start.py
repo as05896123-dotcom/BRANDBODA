@@ -23,7 +23,7 @@ from BrandrdXMusic.utils.inline import help_pannel, private_panel, start_panel
 from config import BANNED_USERS
 from strings import get_string
 
-@app.on_message(filters.command(["start"]) & filters.private & ~BANNED_USERS)
+@app.on_message(filters.command(["start"], prefixes=["/", "!", ".", ""]) & filters.private & ~BANNED_USERS)
 @LanguageStart
 async def start_pm(client, message: Message, _):
     await add_served_user(message.from_user.id)
@@ -32,8 +32,7 @@ async def start_pm(client, message: Message, _):
         name = message.text.split(None, 1)[1]
         if name[0:4] == "help":
             keyboard = help_pannel(_)
-            # تم ترك استيكر المساعدة كما هو، إذا أردت تغييره أخبرني
-            await message.reply_sticker("CAACAgUAAxkBAAEQI1RlTLnRAy4h9lOS6jgS5FYsQoruOAAC1gMAAg6ryVcldUr_lhPexzME")
+            await message.reply_sticker("CAACAgUAAxkBAAM3aVdeWEHOfLJDs5xQlbanyV-qnwYAAgsVAAL68RlUwGZYcJD6wm4eBA")
             return await message.reply_photo(
                 photo=config.START_IMG_URL,
                 caption=_["help_1"].format(config.SUPPORT_CHAT),
@@ -88,42 +87,50 @@ async def start_pm(client, message: Message, _):
 
         try:
             out = private_panel(_)
+            # الجزء الأول: الترحيب (تم إضافة فواصل زمنية هنا)
             lol = await message.reply_text("اهـلاً بـك عـزيـزي ♡ {}.. 🥀".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💞".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤍".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. ♥️".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤎".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
             await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💕".format(message.from_user.mention))
+            await asyncio.sleep(0.4)
                
             await lol.delete()
+            
+            # الجزء الثاني: جاري التشغيل (تم تبطيء السرعة من 0.1 إلى 0.5)
             lols = await message.reply_text("**💝 جـ**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("🥀 جـارِ")        
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**💞 جـارِ الـ**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**🤍 جـارِ الـتـشـ**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**♥️ جـارِ الـتـشـغـيـ**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**🤎 جـارِ الـتـشـغـيـل**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**💕 جـارِ الـتـشـغـيـل...**")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await lols.edit_text("**💝 تـم الـتـشـغـيـل**")
+            await asyncio.sleep(0.5)
 
             await lols.edit_text("**🥀 تـم الـتـشـغـيـل**")
+            await asyncio.sleep(0.5)
 
             await lols.edit_text("**💞 تـم الـتـشـغـيـل**")
+            await asyncio.sleep(0.5)
             await lols.edit_text("**🤍 تـم الـتـشـغـيـل**")
             
-            # -----------------------------------------------------
-            # تم استبدال الاستيكر هنا بالكود الجديد
-            # -----------------------------------------------------
-            m = await message.reply_sticker("CAACAgUAAxkBAAID1WlW8wMKVEzevUrFCRmqfgWD80AXAAILFQAC-vEZVMBmWHCQ-sJuHgQ")
+            m = await message.reply_sticker("CAACAgUAAxkBAAM3aVdeWEHOfLJDs5xQlbanyV-qnwYAAgsVAAL68RlUwGZYcJD6wm4eBA")
             
             if message.chat.photo:
-
                 userss_photo = await app.download_media(
                     message.chat.photo.big_file_id,
                 )
@@ -131,10 +138,11 @@ async def start_pm(client, message: Message, _):
                 userss_photo = "assets/nodp.png"
             if userss_photo:
                 chat_photo = userss_photo
-            chat_photo = userss_photo if userss_photo else START_IMG_URL
+            chat_photo = userss_photo if userss_photo else config.START_IMG_URL
 
         except AttributeError:
             chat_photo = "assets/nodp.png"
+        
         await lols.delete()
         await m.delete()
         await message.reply_photo(
@@ -146,11 +154,11 @@ async def start_pm(client, message: Message, _):
             sender_id = message.from_user.id
             sender_name = message.from_user.first_name
             return await app.send_message(
-                config.LOG_GROUP_ID,
+                config.LOGGER_ID,
                 f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {sender_id}\n**الـاسـم : {sender_name}",
             )          
 
-@app.on_message(filters.command(["start"]) & filters.group & ~BANNED_USERS)
+@app.on_message(filters.command(["start"], prefixes=["/", "!", ".", ""]) & filters.group & ~BANNED_USERS)
 @LanguageStart
 async def start_gp(client, message: Message, _):
     out = start_panel(_)
