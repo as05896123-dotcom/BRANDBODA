@@ -30,7 +30,8 @@ from config import BANNED_USERS, lyrical
         [
             "play", "vplay", "cplay", "cvplay", "playforce", "vplayforce", "cplayforce", "cvplayforce",
             "شغل", "تشغيل", "فيديو", "فيد", "سمعني", "قناة"
-        ]
+        ],
+        prefixes=["/", "!", ".", ""] # تم السماح هنا بالكتابة بدون علامات
     )
     & filters.group
     & ~BANNED_USERS
@@ -46,6 +47,8 @@ async def play_commnd(
     playmode,
     url,
     fplay,
+    *args,
+    **kwargs
 ):
     command = message.command[0].lower()
     if any(x in command for x in ["v", "فيديو", "فيد"]):
@@ -188,7 +191,7 @@ async def play_commnd(
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
                 return await mystic.edit_text(
-                    "» عــذراً ســبــوتــيــفــاي غــيــر مــدعــوم حــالــيــاً.\n\nتــأكــد مــن وضــع كــود الــتــطــبــيــق فــي الــإعــدادات."
+                    "» عــذراً ســبــوتــيــفــاي غــيــر مــدعــوم حــالــيــاً.\n\nتــأكــد مــن وضــع كــود الــتــطــبــق فــي الــإعــدادات."
                 )
             if "track" in url:
                 try:
