@@ -1,3 +1,5 @@
+from BrandrdXMusic.logging import LOGGER
+
 from BrandrdXMusic.core.bot import Hotty
 from BrandrdXMusic.core.dir import dirr
 from BrandrdXMusic.core.git import git
@@ -5,8 +7,8 @@ from BrandrdXMusic.core.userbot import Userbot
 from BrandrdXMusic.misc import dbb, heroku
 
 from SafoneAPI import SafoneAPI
-from .logging import LOGGER
 
+# الدوال دي بتشتغل دلوقتي واللوجر جاهز
 dirr()
 git()
 dbb()
@@ -15,7 +17,6 @@ heroku()
 app = Hotty()
 userbot = Userbot()
 api = SafoneAPI()
-
 
 from .platforms import *
 
@@ -27,4 +28,4 @@ Resso = RessoAPI()
 Telegram = TeleAPI()
 YouTube = YouTubeAPI()
 
-APP = "Systumm_music_bot"  # connect music api key "Dont change it"
+APP = "Systumm_music_bot"
