@@ -1,46 +1,52 @@
 import os
 from yt_dlp import YoutubeDL
-
-# تـحـديـد مـسـار مـلـف الـكـوكـيـز
-cookie_path = "cookies/BrandedXMusic.txt"
-
-# الـتـحـقـق مـن وجـود الـمـلـف لـضـمـان الـعـمـل
-if os.path.isfile(cookie_path):
-    active_cookie = cookie_path
-else:
-    active_cookie = None
-    print(f"تـنـبـيـه: مـلـف الـكـوكـيـز غـيـر مـوجـود فـي: {cookie_path}")
-
-ydl_opts = {
-    "format": "bestaudio/best",
-    "outtmpl": "downloads/%(id)s.%(ext)s",
-    "geo_bypass": True,
-    "nocheckcertificate": True,
-    "quiet": True,
-    "no_warnings": True,
-    "cookiefile": active_cookie,
-    "postprocessors": [
-        {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "320",
-        }
-    ],
-}
+from BrandrdXMusic import LOGGER
 
 def audio_dl(url: str) -> str:
-    # تـشـغـيـل الأداة مـع الإعـدادات الـمـحـدثـة
-    with YoutubeDL(ydl_opts) as ydl:
-        # جـلـب الـمـعـلـومـات فـقـط لـلـتـأكـد مـن الاسـم
-        sin = ydl.extract_info(url, download=False)
-        
-        # تـحـديـد الـمـسـار الـنـهـائـي بـعـد الـتـحـويـل
-        x_file = os.path.join("downloads", f"{sin['id']}.mp3")
-        
-        # إذا كـان الـمـلـف مـوجـوداً مـسـبـقـاً نـرجـعـه مـبـاشـرة
-        if os.path.exists(x_file):
-            return x_file
+    # التحقق من الكوكيز
+    if os.path.isfile("cookies/cookies.txt"):
+        active_cookie = "cookies/cookies.txt"
+    elif os.path.isfile("cookies/BrandrdXMusic.txt"):
+        active_cookie = "cookies/BrandrdXMusic.txt"
+    else:
+        active_cookie = None
+        # لن نوقف العملية، لكن سننبه فقط
+    
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": "downloads/%(id)s.%(ext)s",
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "quiet": True,
+        "no_warnings": True,
+        "cookiefile": active_cookie,
+        "source_address": "0.0.0.0",
+        # إعدادات التحويل لـ MP3
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192", # 192 كافية جداً للبوتات وأسرع من 320
+            }
+        ],
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            # استخراج المعلومات أولاً بدون تحميل
+            info = ydl.extract_info(url, download=False)
             
-        # بـدء الـتـحـمـيـل والـتـحـويـل إلـى mp3
-        ydl.download([url])
-        return x_file
+            # تحديد المسار النهائي المتوقع
+            file_path = os.path.join("downloads", f"{info['id']}.mp3")
+            
+            # إذا كان الملف موجوداً بالفعل، لا داعي لإعادة التحميل
+            if os.path.exists(file_path):
+                return file_path
+            
+            # البدء بالتحميل الفعلي
+            ydl.download([url])
+            return file_path
+            
+    except Exception as e:
+        LOGGER(__name__).error(f"فشل تحميل وتحويل الصوت: {e}")
+        return None
