@@ -6,6 +6,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
+# تعريف فلتر الجودة العالية (LANCZOS) المتوافق مع كل الإصدارات
+if hasattr(Image, "Resampling"):
+    LANCZOS = Image.Resampling.LANCZOS
+else:
+    LANCZOS = Image.LANCZOS
+
 def get_font(size):
     possible_fonts = [
         "BrandrdXMusic/assets/font.ttf",
@@ -21,79 +27,83 @@ def get_font(size):
 def truncate_text(draw, text, font, max_width):
     try:
         w = draw.textlength(text, font=font)
-    except:
+    except AttributeError:
         w = draw.textsize(text, font=font)[0]
+        
     if w <= max_width:
         return text
     for i in range(len(text), 0, -1):
         temp_text = text[:i] + "..."
         try:
-            if draw.textlength(temp_text, font=font) <= max_width: return temp_text
-        except:
-            if draw.textsize(temp_text, font=font)[0] <= max_width: return temp_text
+            w_temp = draw.textlength(temp_text, font=font)
+        except AttributeError:
+            w_temp = draw.textsize(temp_text, font=font)[0]
+            
+        if w_temp <= max_width:
+            return temp_text
     return "..."
 
 async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
     try:
-        # تجهيز الصورة الأساسية
+        # تجهيز الصورة
         if os.path.isfile(thumbnail):
             source_art = Image.open(thumbnail).convert("RGBA")
         else:
             source_art = Image.new('RGBA', (500, 500), (30, 30, 30))
 
-        # 1. إعداد الخلفية (تأثير الزجاج الواضح)
-        background = source_art.resize((1280, 720))
-        
-        # التغبيش خفيف (10) لتبدو الخلفية كأنها وراء زجاج ولكن واضحة
+        # 1. الخلفية (تم إضافة LANCZOS للجودة العالية)
+        background = source_art.resize((1280, 720), resample=LANCZOS)
         background = background.filter(ImageFilter.GaussianBlur(10))
         
-        # طبقة سوداء خفيفة جداً (40) لزيادة وضوح النصوص فقط
         dark_layer = Image.new('RGBA', (1280, 720), (0, 0, 0, 40))
         background = Image.alpha_composite(background, dark_layer)
 
-        # 2. رسم الدائرة (صورة الألبوم واضحة تماماً)
+        # 2. الدائرة (بنفس إحداثياتك المظبوطة + جودة عالية)
         circle_x, circle_y = 53, 148 
         circle_diam = 416
-        art_for_circle = ImageOps.fit(source_art, (circle_diam, circle_diam), centering=(0.5, 0.5))
+        
+        # استخدام LANCZOS هنا عشان صورة الألبوم جوه الدائرة تبقى HD
+        art_for_circle = ImageOps.fit(source_art, (circle_diam, circle_diam), centering=(0.5, 0.5), method=LANCZOS)
+        
         mask = Image.new('L', (circle_diam, circle_diam), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, circle_diam, circle_diam), fill=255)
+        
         final_circle_art = Image.new('RGBA', (circle_diam, circle_diam), (0,0,0,0))
         final_circle_art.paste(art_for_circle, (0, 0), mask)
+        
         background.paste(final_circle_art, (circle_x, circle_y), final_circle_art)
 
-        # 3. وضع القالب الشفاف (Overlay)
-        # تأكد من وجود الملف BrandrdXMusic/assets/overlay.png
+        # 3. القالب الشفاف (Overlay)
         overlay_path = "BrandrdXMusic/assets/overlay.png"
         if os.path.isfile(overlay_path):
             overlay = Image.open(overlay_path).convert("RGBA")
-            overlay = overlay.resize((1280, 720))
+            # تغيير حجم القالب بجودة عالية
+            overlay = overlay.resize((1280, 720), resample=LANCZOS)
             background = Image.alpha_composite(background, overlay)
 
-        # 4. كتابة النصوص (بالإحداثيات التي قمت بضبطها)
+        # 4. النصوص (بنفس إحداثياتك)
         draw = ImageDraw.Draw(background)
         
         f_title = get_font(42)
         f_info = get_font(32)
         f_time = get_font(24)
 
-        # --- الإحداثيات النهائية ---
-
-        # 1. العنوان (Title)
+        # العنوان
         title_x = 601
         safe_title = truncate_text(draw, title, f_title, 1180 - title_x)
         draw.text((title_x, 180), safe_title, font=f_title, fill="white")
 
-        # 2. الفنان (Artist)
+        # الفنان
         artist_x = 550
         artist_y = 250
         safe_user = truncate_text(draw, userid, f_info, 1180 - artist_x)
         draw.text((artist_x, artist_y), safe_user, font=f_info, fill="#cccccc")
 
-        # 3. المشاهدات (Views)
+        # المشاهدات
         views_x = 600
         draw.text((views_x, 315), views, font=f_info, fill="#aaaaaa")
 
-        # 4. الوقت (Time)
+        # الوقت
         bar_start_x = 500
         bar_end_x = 1150
         time_y = 390
@@ -102,7 +112,7 @@ async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         
         try:
             dur_width = draw.textlength(duration, font=f_time)
-        except:
+        except AttributeError:
             dur_width = draw.textsize(duration, font=f_time)[0]
             
         draw.text((bar_end_x - dur_width, time_y), duration, font=f_time, fill="white")
