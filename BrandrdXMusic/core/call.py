@@ -36,7 +36,8 @@ from BrandrdXMusic.utils.database import (
 )
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.formatters import check_duration, seconds_to_min, speed_converter
-from BrandrdXMusic.utils.inline.play import stream_markup
+# إصلاح الاستدعاءات: أضفنا stream_markup2 لأنه مستخدم في الكود
+from BrandrdXMusic.utils.inline import stream_markup, stream_markup2, close_markup
 from BrandrdXMusic.utils.stream.autoclear import auto_clean
 from BrandrdXMusic.utils.thumbnails import get_thumb
 from strings import get_string
@@ -203,17 +204,19 @@ class Call(PyTgCalls):
         dur = int(dur)
         played, con_seconds = speed_converter(playing[0]["played"], speed)
         duration = seconds_to_min(dur)
+        
+        # تحسين الجودة هنا
         stream = (
             MediaStream(
                 out,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH, 
                 video_parameters=VideoQuality.SD_480p,
                 ffmpeg_parameters=f"-ss {played} -to {duration}",
             )
             if playing[0]["streamtype"] == "video"
             else MediaStream(
                 out,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH, 
                 ffmpeg_parameters=f"-ss {played} -to {duration}",
                 video_flags=MediaStream.IGNORE,
             )
@@ -258,13 +261,13 @@ class Call(PyTgCalls):
         if video:
             stream = MediaStream(
                 link,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH,
                 video_parameters=VideoQuality.SD_480p,
             )
         else:
             stream = MediaStream(
                 link,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH,
                 video_flags=MediaStream.IGNORE,
             )
         await assistant.change_stream(
@@ -277,14 +280,14 @@ class Call(PyTgCalls):
         stream = (
             MediaStream(
                 file_path,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH,
                 video_parameters=VideoQuality.SD_480p,
                 ffmpeg_parameters=f"-ss {to_seek} -to {duration}",
             )
             if mode == "video"
             else MediaStream(
                 file_path,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH,
                 ffmpeg_parameters=f"-ss {to_seek} -to {duration}",
                 video_flags=MediaStream.IGNORE,
             )
@@ -311,33 +314,33 @@ class Call(PyTgCalls):
         assistant = await group_assistant(self, chat_id)
         language = await get_lang(chat_id)
         _ = get_string(language)
+        
+        # تحسين إعدادات البث
         if video:
             stream = MediaStream(
                 link,
-                audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                audio_parameters=AudioQuality.HIGH,
                 video_parameters=VideoQuality.SD_480p,
             )
         else:
-            stream = (
-                MediaStream(
-                    link,
-                    audio_parameters=AudioQuality.MEDIUM, # تم التعديل
-                    video_parameters=VideoQuality.SD_480p,
-                )
-                if video
-                else MediaStream(
-                    link,
-                    audio_parameters=AudioQuality.MEDIUM, # تم التعديل
-                    video_flags=MediaStream.IGNORE,
-                )
+            stream = MediaStream(
+                link,
+                audio_parameters=AudioQuality.HIGH,
+                video_flags=MediaStream.IGNORE,
             )
+            
         try:
             await assistant.join_group_call(
                 chat_id,
                 stream,
             )
         except NoActiveGroupCall:
-            raise AssistantErr(_["call_8"])
+            # محاولة إنشاء مكالمة إذا لم تكن موجودة (في بعض الحالات النادرة)
+            try:
+                await self.userbot1.start_group_call(chat_id)
+                await assistant.join_group_call(chat_id, stream)
+            except:
+                raise AssistantErr(_["call_8"])
         except AlreadyJoinedError:
             raise AssistantErr(_["call_9"])
         except TelegramServerError:
@@ -345,6 +348,7 @@ class Call(PyTgCalls):
         except Exception as e:
             if "phone.CreateGroupCall" in str(e):
                 raise AssistantErr(_["call_8"])
+        
         await add_active_chat(chat_id)
         await music_on(chat_id)
         if video:
@@ -391,6 +395,7 @@ class Call(PyTgCalls):
                 db[chat_id][0]["speed_path"] = None
                 db[chat_id][0]["speed"] = 1.0
             video = str(streamtype) == "video"
+            
             if "live_" in queued:
                 n, link = await YouTube.video(videoid, True)
                 if n == 0:
@@ -401,13 +406,13 @@ class Call(PyTgCalls):
                 if video:
                     stream = MediaStream(
                         link,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_parameters=VideoQuality.SD_480p,
                     )
                 else:
                     stream = MediaStream(
                         link,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_flags=MediaStream.IGNORE,
                     )
                 try:
@@ -432,6 +437,7 @@ class Call(PyTgCalls):
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
+                
             elif "vid_" in queued:
                 mystic = await app.send_message(original_chat_id, _["call_7"])
                 try:
@@ -448,13 +454,13 @@ class Call(PyTgCalls):
                 if video:
                     stream = MediaStream(
                         file_path,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_parameters=VideoQuality.SD_480p,
                     )
                 else:
                     stream = MediaStream(
                         file_path,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_flags=MediaStream.IGNORE,
                     )
                 try:
@@ -480,17 +486,18 @@ class Call(PyTgCalls):
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
+                
             elif "index_" in queued:
                 stream = (
                     MediaStream(
                         videoid,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_parameters=VideoQuality.SD_480p,
                     )
                     if str(streamtype) == "video"
                     else MediaStream(
                         videoid,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_flags=MediaStream.IGNORE,
                     )
                 )
@@ -510,17 +517,18 @@ class Call(PyTgCalls):
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
+                
             else:
                 if video:
                     stream = MediaStream(
                         queued,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_parameters=VideoQuality.SD_480p,
                     )
                 else:
                     stream = MediaStream(
                         queued,
-                        audio_parameters=AudioQuality.MEDIUM, # تم التعديل
+                        audio_parameters=AudioQuality.HIGH,
                         video_flags=MediaStream.IGNORE,
                     )
                 try:
