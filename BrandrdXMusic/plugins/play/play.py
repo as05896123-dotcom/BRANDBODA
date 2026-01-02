@@ -1,5 +1,6 @@
 import random
 import string
+import traceback
 
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
@@ -31,7 +32,7 @@ from config import BANNED_USERS, lyrical
             "play", "vplay", "cplay", "cvplay", "playforce", "vplayforce", "cplayforce", "cvplayforce",
             "شغل", "تشغيل", "فيديو", "فيد", "سمعني", "قناة"
         ],
-        prefixes=["/", "!", ".", ""] # تم السماح هنا بالكتابة بدون علامات
+        prefixes=["/", "!", ".", ""] # يعمل بدون علامات
     )
     & filters.group
     & ~BANNED_USERS
@@ -75,6 +76,8 @@ async def play_commnd(
         if message.reply_to_message
         else None
     )
+    
+    # --- قسم تشغيل الملفات من التيليجرام (صوت) ---
     if audio_telegram:
         if audio_telegram.file_size > 104857600:
             return await mystic.edit_text(_["play_5"])
@@ -106,13 +109,17 @@ async def play_commnd(
                     message.chat.id,
                     streamtype="telegram",
                     forceplay=fplay,
+                    spotify=False, # إصلاح TypeError بإضافة هذا
                 )
             except Exception as e:
+                traceback.print_exc()
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
+
+    # --- قسم تشغيل الملفات من التيليجرام (فيديو) ---
     elif video_telegram:
         if message.reply_to_message.document:
             try:
@@ -150,13 +157,17 @@ async def play_commnd(
                     video=True,
                     streamtype="telegram",
                     forceplay=fplay,
+                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
+                traceback.print_exc()
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
+
+    # --- قسم تشغيل الروابط ---
     elif url:
         if await YouTube.exists(url):
             if "playlist" in url:
@@ -283,8 +294,10 @@ async def play_commnd(
                     message.chat.id,
                     streamtype="soundcloud",
                     forceplay=fplay,
+                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
+                traceback.print_exc()
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
@@ -313,8 +326,10 @@ async def play_commnd(
                     video=video,
                     streamtype="index",
                     forceplay=fplay,
+                    spotify=False, # إصلاح TypeError
                 )
             except Exception as e:
+                traceback.print_exc()
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
@@ -371,6 +386,7 @@ async def play_commnd(
                 forceplay=fplay,
             )
         except Exception as e:
+            traceback.print_exc()
             ex_type = type(e).__name__
             err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
             return await mystic.edit_text(err)
@@ -496,8 +512,10 @@ async def play_music(client, CallbackQuery, _):
             video,
             streamtype="youtube",
             forceplay=ffplay,
+            spotify=False, # إصلاح
         )
     except Exception as e:
+        traceback.print_exc()
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
         return await mystic.edit_text(err)
@@ -589,6 +607,7 @@ async def play_playlists_command(client, CallbackQuery, _):
             forceplay=ffplay,
         )
     except Exception as e:
+        traceback.print_exc()
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
         return await mystic.edit_text(err)
