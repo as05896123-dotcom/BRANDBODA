@@ -3,15 +3,15 @@ import re
 import aiofiles
 import aiohttp
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
-from youtubesearchpython import VideosSearch
+from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
-# دالة التصميم الخاصة بك (تقوم برسم الأسطوانة والزجاج)
-async def gen_thumb(thumbnail, title, userid, theme, duration, views, videoid):
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 1. دالة الرسم والتصميم (Vinyl Style)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
     try:
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 1. إعداد الخلفية والصورة الأساسية
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # إعداد الخلفية
         if os.path.isfile(thumbnail):
             source = Image.open(thumbnail).convert("RGB")
         else:
@@ -23,9 +23,7 @@ async def gen_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         overlay = Image.new('RGBA', (1280, 720), (0, 0, 0, 100))
         bg.paste(overlay, (0, 0), overlay)
 
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 2. تصميم الأسطوانة (Vinyl)
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # تصميم الأسطوانة (Vinyl)
         sz = 440
         mask = Image.new('L', (sz, sz), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, sz, sz), fill=255)
@@ -64,23 +62,20 @@ async def gen_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         bg.paste(shadow, (-60, (720-sz)//2 + 20), shadow)
         bg.paste(vinyl, (-80, (720-sz)//2), vinyl)
 
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 3. الفقاعة الزجاجية (Glass Bubble)
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # الفقاعة الزجاجية
         cx, cy, cw, ch = 440, 160, 780, 420
         glass = Image.new('RGBA', (cw, ch), (255, 255, 255, 0))
         d_glass = ImageDraw.Draw(glass)
         d_glass.rounded_rectangle((0,0,cw,ch), radius=60, fill=(255,255,255,15), outline=(255,255,255,50), width=2)
         bg.paste(glass, (cx, cy), glass)
 
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 4. النصوص والمحتوى
-        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # النصوص
         d = ImageDraw.Draw(bg)
         try:
-            f_title = ImageFont.truetype("BrandrdXMusic/assets/font.ttf", 55)
-            f_sub = ImageFont.truetype("BrandrdXMusic/assets/font.ttf", 35)
-            f_small = ImageFont.truetype("BrandrdXMusic/assets/font2.ttf", 28)
+            # محاولة تحميل الخطوط، إذا فشل يستخدم الافتراضي
+            f_title = ImageFont.truetype("assets/font.ttf", 55)
+            f_sub = ImageFont.truetype("assets/font.ttf", 35)
+            f_small = ImageFont.truetype("assets/font.ttf", 28)
         except:
             f_title = f_sub = f_small = ImageFont.load_default()
 
@@ -100,28 +95,25 @@ async def gen_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         d.text((tx, by+25), "00:00", font=f_small, fill="white")
         d.text((cx+cw-150, by+25), duration, font=f_small, fill="white")
 
-        # الحفظ باسم الفيديو آيدي لسهولة الوصول
         output = f"cache/{videoid}.png"
         bg.save(output)
         return output
         
     except Exception as e:
-        print(f"Error in gen_thumb: {e}")
+        print(f"Error in draw_thumb: {e}")
         return thumbnail
 
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# الدالة الرئيسية التي يطلبها البوت (get_thumb)
+# 2. الدالة الرئيسية (Main Entry Point)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async def get_thumb(videoid):
-    # التأكد من وجود مجلد الكاش لتجنب الأخطاء
+async def gen_thumb(videoid, user_id):
     if not os.path.exists("cache"):
         os.makedirs("cache")
 
-    # إذا كانت الصورة موجودة مسبقاً في الكاش، قم بإرجاعها فوراً
     if os.path.isfile(f"cache/{videoid}.png"):
         return f"cache/{videoid}.png"
 
-    # جلب معلومات الفيديو
     url = f"https://www.youtube.com/watch?v={videoid}"
     try:
         results = VideosSearch(url, limit=1)
@@ -135,8 +127,12 @@ async def get_thumb(videoid):
             try:
                 duration = result["duration"]
             except:
-                duration = "Unknown Mins"
-            thumbnail = result["thumbnails"][0]["url"].split("?")[0]
+                duration = "Unknown"
+            
+            # === ⚠️ هنا الإصلاح الحقيقي ⚠️ ===
+            # أخذنا الرابط كاملاً وحذفنا .split("?")[0]
+            thumbnail = result["thumbnails"][0]["url"]
+
             try:
                 views = result["viewCount"]["short"]
             except:
@@ -146,7 +142,6 @@ async def get_thumb(videoid):
             except:
                 channel = "Unknown Channel"
 
-        # تحميل الصورة الخام مؤقتاً
         async with aiohttp.ClientSession() as session:
             async with session.get(thumbnail) as resp:
                 if resp.status == 200:
@@ -154,9 +149,8 @@ async def get_thumb(videoid):
                     await f.write(await resp.read())
                     await f.close()
 
-        # استدعاء دالة التصميم الخاصة بك
-        # نمرر اللون الأحمر كافتراضي للثيم
-        final_image = await gen_thumb(
+        # استدعاء دالة الرسم
+        final_image = await draw_thumb(
             f"cache/temp{videoid}.png", 
             title, 
             channel, 
@@ -166,7 +160,6 @@ async def get_thumb(videoid):
             videoid
         )
 
-        # حذف الصورة المؤقتة لتوفير المساحة
         try:
             os.remove(f"cache/temp{videoid}.png")
         except:
