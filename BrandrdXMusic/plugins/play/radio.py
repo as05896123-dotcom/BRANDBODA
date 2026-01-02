@@ -25,7 +25,7 @@ from BrandrdXMusic.utils.database import (
 from BrandrdXMusic.utils.logger import play_logs
 from BrandrdXMusic.utils.stream.stream import stream
 
-# الروابط والمحطات
+# قائمة المحطات الإذاعية
 RADIO_STATION = {
     "القرآن الكريم": "https://stream.radiojar.com/8s5u5tpdtwzuv",
     "نجوم اف ام": "https://ssl.mz-audiostreaming.com/nogoumfm",
@@ -52,45 +52,44 @@ valid_stations = "\n".join([f"`{name}`" for name in sorted(RADIO_STATION.keys())
 )
 async def radio(client, message: Message):
     # ==================================================================
-    # 1. منطق جلب الاسم والآيدي (كي لا يخطئ البوت)
+    # 1. التحقق من الصلاحيات (مشرف / مالك / مطور / مشرف مخفي)
     # ==================================================================
     
-    # تعريف المتغيرات فارغة في البداية
     user_id = None
     user_name = None
     is_admin = False
 
+    # (أ) التحقق من المشرف المخفي (Anonymous Admin)
     if message.sender_chat and message.sender_chat.id == message.chat.id:
-        # الحالة 1: المشرف المخفي (Anonymous Admin)
-        # نستخدم اسم المجموعة وآيدي المجموعة كبديل لبيانات المستخدم
         user_id = message.chat.id
         user_name = message.chat.title 
-        is_admin = True # المشرف المخفي هو أدمن بالتأكيد
+        is_admin = True
         
+    # (ب) التحقق من المستخدم العادي
     elif message.from_user:
-        # الحالة 2: مستخدم عادي / مشرف بحسابه الحقيقي
         user_id = message.from_user.id
         user_name = message.from_user.first_name
         
-        # التحقق من أن هذا المستخدم مشرف أو مطور
-        admins = adminlist.get(message.chat.id)
-        if not admins:
-            is_admin = False # القائمة غير محملة بعد
+        # 1. هل هو مطور (SUDO)؟
+        if user_id in SUDOERS:
+            is_admin = True
         else:
-            if user_id in admins or user_id in SUDOERS:
-                is_admin = True
+            # 2. فحص حالة العضو في الجروب مباشرة من تيليجرام
+            try:
+                member = await app.get_chat_member(message.chat.id, user_id)
+                if member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+                    is_admin = True
+            except Exception:
+                is_admin = False
     else:
-        # حالة نادرة جداً
         return
 
-    # ==================================================================
-    # 2. التحقق من الصلاحية (للمشرفين فقط)
-    # ==================================================================
+    # إذا لم يكن مشرفاً، نرفض الطلب
     if not is_admin:
-        return await message.reply_text("🚫 **عذراً، هذا الأمر للمشرفين فقط.**")
+        return await message.reply_text("🧚 **عذراً، هذا الأمر للمشرفين والمالك فقط.**")
 
     # ==================================================================
-    # 3. التأكد من وجود المساعد (Assistant) في المجموعة
+    # 2. دعوة المساعد (Assistant) إن لم يكن موجوداً
     # ==================================================================
     msg = await message.reply_text("جـارِ الاتـصـال بـالـبـث الـمـبـاشـر...")
     try:
@@ -172,7 +171,7 @@ async def radio(client, message: Message):
     await msg.delete()
     
     # ==================================================================
-    # 4. اختيار المحطة وتشغيلها
+    # 3. معالجة الأمر وتشغيل المحطة
     # ==================================================================
     if len(message.command) < 2:
         return await message.reply(
@@ -180,11 +179,10 @@ async def radio(client, message: Message):
         )
         
     station_name = " ".join(message.command[1:])
-    
-    # البحث عن المحطة (تطبيع الحروف للبحث المرن)
     target_station = None
+    
+    # البحث بمرونة (بدون همزات وتاء مربوطة)
     for station in RADIO_STATION:
-        # توحيد: أ، إ، آ -> ا | ة -> ه | ى -> ي
         clean_input = station_name.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي")
         clean_station = station.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي")
         
@@ -215,20 +213,17 @@ async def radio(client, message: Message):
             _["play_2"].format(channel) if channel else _["play_1"]
         )
         try:
-            # هنا نستخدم user_id و user_name اللذين حددناهما في الخطوة 1
-            # بدلاً من message.from_user الذي قد يسبب الخطأ
+            # === دالة التشغيل (بدون إضافات تسبب مشاكل) ===
             await stream(
                 _,
                 mystic,
-                user_id,         # تم التعديل
+                user_id,
                 RADIO_URL,
                 chat_id,
-                user_name,       # تم التعديل
+                user_name,
                 message.chat.id,
                 video=video,
                 streamtype="index",
-                forceplay=None,  # إصلاح TypeError
-                spotify=False,   # إصلاح TypeError
             )
         except Exception as e:
             ex_type = type(e).__name__
