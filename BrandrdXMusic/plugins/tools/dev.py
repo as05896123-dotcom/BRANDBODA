@@ -29,18 +29,18 @@ async def edit_or_reply(msg: Message, **kwargs):
 
 
 @app.on_edited_message(
-    filters.command(["eval", "نفذ", "كود"])
+    filters.command(["eval", "نفذ", "كود"], prefixes=["/", "!", ".", ""])
     & filters.user(OWNER_ID)
     & ~filters.forwarded
     & ~filters.via_bot
 )
 @app.on_message(
-    filters.command(["eval", "نفذ", "كود"])
+    filters.command(["eval", "نفذ", "كود"], prefixes=["/", "!", ".", ""])
     & filters.user(OWNER_ID)
     & ~filters.forwarded
     & ~filters.via_bot
 )
-async def executor(client: app, message: Message):
+async def executor(client, message: Message):
     if len(message.command) < 2:
         return await edit_or_reply(message, text="⚡ **مـاذا تـريـد تـنـفـيـذه يـا مـطـور ؟**")
     
@@ -74,7 +74,7 @@ async def executor(client: app, message: Message):
     elif stdout:
         evaluation = stdout
     else:
-        evaluation = "تـم الـتـنـفـيـذ بـنـجـاح ✅"
+        evaluation = "تـم الـتـنـفـيـذ بـنـجـاح 💕"
     
     final_output = f"**💞 الـنـتـيـجـة :**\n<pre language='python'>{evaluation}</pre>"
     
@@ -146,20 +146,20 @@ async def forceclose_command(_, CallbackQuery):
 
 
 @app.on_edited_message(
-    filters.command(["sh", "term", "تيرمنال"])
+    filters.command(["sh", "term", "تيرمنال"], prefixes=["/", "!", ".", ""])
     & filters.user(OWNER_ID)
     & ~filters.forwarded
     & ~filters.via_bot
 )
 @app.on_message(
-    filters.command(["sh", "term", "تيرمنال"])
+    filters.command(["sh", "term", "تيرمنال"], prefixes=["/", "!", ".", ""])
     & filters.user(OWNER_ID)
     & ~filters.forwarded
     & ~filters.via_bot
 )
-async def shellrunner(_, message: Message):
+async def shellrunner(client, message: Message):
     if len(message.command) < 2:
-        return await edit_or_reply(message, text="**⚡ مـثـال :**\n/sh git pull")
+        return await edit_or_reply(message, text="**⚡ مـثـال :**\nsh git pull")
     
     text = message.text.split(None, 1)[1]
     if "\n" in text:
@@ -197,7 +197,7 @@ async def shellrunner(_, message: Message):
                 tb=exc_tb,
             )
             return await edit_or_reply(
-                message, text=f"**⚠️ خـطـأ :**\n<pre>{''.join(errors)}</pre>"
+                message, text=f"**🤎 خـطـأ :**\n<pre>{''.join(errors)}</pre>"
             )
         output = process.stdout.read()[:-1].decode("utf-8")
     
