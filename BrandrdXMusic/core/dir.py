@@ -4,6 +4,7 @@ from ..logging import LOGGER
 
 
 def dirr():
+    # حذف الصور المؤقتة من المجلد الرئيسي
     for file in os.listdir():
         if file.endswith(".jpg"):
             os.remove(file)
@@ -12,9 +13,8 @@ def dirr():
         elif file.endswith(".png"):
             os.remove(file)
 
-    if "downloads" not in os.listdir():
-        os.mkdir("downloads")
-    if "cache" not in os.listdir():
-        os.mkdir("cache")
+    # إنشاء المجلدات الضرورية إذا لم تكن موجودة
+    os.makedirs("downloads", exist_ok=True)
+    os.makedirs("cache", exist_ok=True)
 
-    LOGGER(__name__).info("Directories Updated.")
+    LOGGER(__name__).info("تم تحديث المجلدات بنجاح.")
