@@ -14,7 +14,7 @@ class Userbot(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING1),
-            no_updates=True,
+            # تم إزالة no_updates=True لأنها تسبب مشاكل في الإصدارات الجديدة
         )
             
         self.two = Client(
@@ -22,28 +22,24 @@ class Userbot(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING2),
-            no_updates=True,
         )
         self.three = Client(
             name="BrandrdXMusic3",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING3),
-            no_updates=True,
         )
         self.four = Client(
             name="BrandrdXMusic4",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING4),
-            no_updates=True,
         )
         self.five = Client(
             name="BrandrdXMusic5",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING5),
-            no_updates=True,
         )
 
     async def start(self):
@@ -60,11 +56,14 @@ class Userbot(Client):
                 )
             
             assistants.append(1)
-            self.one.id = self.one.me.id
-            self.one.name = self.one.me.mention
-            self.one.username = self.one.me.username
-            assistantids.append(self.one.id)
-            LOGGER(__name__).info(f"تم تشغيل المساعد الأول باسم {self.one.name}")
+            try:
+                self.one.id = self.one.me.id
+                self.one.name = self.one.me.mention
+                self.one.username = self.one.me.username
+                assistantids.append(self.one.id)
+                LOGGER(__name__).info(f"تم تشغيل المساعد الأول باسم {self.one.name}")
+            except:
+                LOGGER(__name__).error("حدث خطأ في جلب بيانات المساعد الأول")
 
         if config.STRING2:
             await self.two.start()
@@ -77,11 +76,14 @@ class Userbot(Client):
                 )
             
             assistants.append(2)
-            self.two.id = self.two.me.id
-            self.two.name = self.two.me.mention
-            self.two.username = self.two.me.username
-            assistantids.append(self.two.id)
-            LOGGER(__name__).info(f"تم تشغيل المساعد الثاني باسم {self.two.name}")
+            try:
+                self.two.id = self.two.me.id
+                self.two.name = self.two.me.mention
+                self.two.username = self.two.me.username
+                assistantids.append(self.two.id)
+                LOGGER(__name__).info(f"تم تشغيل المساعد الثاني باسم {self.two.name}")
+            except:
+                 LOGGER(__name__).error("حدث خطأ في جلب بيانات المساعد الثاني")
 
         if config.STRING3:
             await self.three.start()
@@ -94,11 +96,14 @@ class Userbot(Client):
                 )
             
             assistants.append(3)
-            self.three.id = self.three.me.id
-            self.three.name = self.three.me.mention
-            self.three.username = self.three.me.username
-            assistantids.append(self.three.id)
-            LOGGER(__name__).info(f"تم تشغيل المساعد الثالث باسم {self.three.name}")
+            try:
+                self.three.id = self.three.me.id
+                self.three.name = self.three.me.mention
+                self.three.username = self.three.me.username
+                assistantids.append(self.three.id)
+                LOGGER(__name__).info(f"تم تشغيل المساعد الثالث باسم {self.three.name}")
+            except:
+                LOGGER(__name__).error("حدث خطأ في جلب بيانات المساعد الثالث")
 
         if config.STRING4:
             await self.four.start()
@@ -111,11 +116,14 @@ class Userbot(Client):
                 )
             
             assistants.append(4)
-            self.four.id = self.four.me.id
-            self.four.name = self.four.me.mention
-            self.four.username = self.four.me.username
-            assistantids.append(self.four.id)
-            LOGGER(__name__).info(f"تم تشغيل المساعد الرابع باسم {self.four.name}")
+            try:
+                self.four.id = self.four.me.id
+                self.four.name = self.four.me.mention
+                self.four.username = self.four.me.username
+                assistantids.append(self.four.id)
+                LOGGER(__name__).info(f"تم تشغيل المساعد الرابع باسم {self.four.name}")
+            except:
+                LOGGER(__name__).error("حدث خطأ في جلب بيانات المساعد الرابع")
 
         if config.STRING5:
             await self.five.start()
@@ -128,11 +136,14 @@ class Userbot(Client):
                 )
             
             assistants.append(5)
-            self.five.id = self.five.me.id
-            self.five.name = self.five.me.mention
-            self.five.username = self.five.me.username
-            assistantids.append(self.five.id)
-            LOGGER(__name__).info(f"تم تشغيل المساعد الخامس باسم {self.five.name}")
+            try:
+                self.five.id = self.five.me.id
+                self.five.name = self.five.me.mention
+                self.five.username = self.five.me.username
+                assistantids.append(self.five.id)
+                LOGGER(__name__).info(f"تم تشغيل المساعد الخامس باسم {self.five.name}")
+            except:
+                LOGGER(__name__).error("حدث خطأ في جلب بيانات المساعد الخامس")
 
     async def stop(self):
         LOGGER(__name__).info(f"جاري إيقاف الحسابات المساعدة...")
