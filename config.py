@@ -10,8 +10,8 @@ load_dotenv()
 # ━━━ إعــدادات الــبــوت الــأســاســيــة ━━━
 
 # احــصــل عــلــيــه مــن my.telegram.org
-API_ID = int(getenv("API_ID", "0")) # ضــع الــآيــدي هــنــا
-API_HASH = getenv("API_HASH", "") # ضــع الــهــاش هــنــا
+API_ID = int(getenv("API_ID", "0"))
+API_HASH = getenv("API_HASH", "")
 
 # تــوكــن الــبــوت مــن @BotFather
 BOT_TOKEN = getenv("BOT_TOKEN", "")
@@ -93,7 +93,7 @@ votemode = {}
 autoclean = []
 confirmer = {}
 
-# ━━━ صــور الــبــوت (تــم تــحــديــثــهــا) ━━━
+# ━━━ صــور الــبــوت ━━━
 
 START_IMG_URL = getenv("START_IMG_URL", "https://files.catbox.moe/exvq3d.jpg")
 PING_IMG_URL = getenv("PING_IMG_URL", "https://files.catbox.moe/kmn0a6.jpg")
