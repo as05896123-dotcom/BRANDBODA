@@ -2,7 +2,12 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def speed_markup(_, chat_id):
-    upl = InlineKeyboardMarkup(
+    """
+    Inline keyboard for changing playback speed
+    Compatible with Pyrogram 2.x
+    """
+
+    return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
@@ -16,7 +21,7 @@ def speed_markup(_, chat_id):
             ],
             [
                 InlineKeyboardButton(
-                    text=_["P_B_4"],
+                    text=_["P_B_4"],  # 1.0x (Normal)
                     callback_data=f"SpeedUP {chat_id}|1.0",
                 ),
             ],
@@ -38,4 +43,3 @@ def speed_markup(_, chat_id):
             ],
         ]
     )
-    return upl
