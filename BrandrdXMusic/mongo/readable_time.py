@@ -1,23 +1,57 @@
 def get_readable_time(seconds: int) -> str:
     count = 0
-    readable_time = ""
     time_list = []
-    time_suffix_list = ["s", "ᴍ", "ʜ", "ᴅᴀʏs"]
+
+    # تسميات الوقت بالكشيدة (مطوّلة)
+    time_units_singular = {
+        "second": "ثـانـيـة",
+        "minute": "دقـيـقـة",
+        "hour": "سـاعـة",
+        "day": "يـوم",
+    }
+
+    time_units_plural = {
+        "second": "ثـوانـي",
+        "minute": "دقـائـق",
+        "hour": "سـاعـات",
+        "day": "أيـام",
+    }
+
+    units_order = ["second", "minute", "hour", "day"]
 
     while count < 4:
         count += 1
-        remainder, result = divmod(seconds, 60) if count < 3 else divmod(seconds, 24)
+
+        if count < 3:
+            remainder, result = divmod(seconds, 60)
+        else:
+            remainder, result = divmod(seconds, 24)
+
         if seconds == 0 and remainder == 0:
             break
+
         time_list.append(int(result))
         seconds = int(remainder)
 
-    for x in range(len(time_list)):
-        time_list[x] = str(time_list[x]) + time_suffix_list[x]
-    if len(time_list) == 4:
-        readable_time += time_list.pop() + ", "
+    readable_parts = []
 
-    time_list.reverse()
-    readable_time += ":".join(time_list)
+    for index, value in enumerate(time_list):
+        if value == 0:
+            continue
 
-    return readable_time
+        unit_key = units_order[index]
+
+        if value == 1:
+            unit_name = time_units_singular[unit_key]
+        else:
+            unit_name = time_units_plural[unit_key]
+
+        readable_parts.append(f"{value} {unit_name}")
+
+    readable_parts.reverse()
+
+    if not readable_parts:
+        return "0 ثـانـيـة"
+
+    # إخراج مطوّل بالكشيدة
+    return " و ".join(readable_parts)
