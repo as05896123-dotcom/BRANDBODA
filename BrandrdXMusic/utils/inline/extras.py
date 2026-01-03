@@ -17,9 +17,9 @@ def close_markup(_):
     upl = InlineKeyboardMarkup(
         [
             [
-                 InlineKeyboardButton(
-                text="🥀 قناة السورس 🥀", url=f"https://t.me/SourceBoda"
-            ),
+                InlineKeyboardButton(
+                    text="🥀 قناة السورس 🥀", url="https://t.me/SourceBoda"
+                ),
                 InlineKeyboardButton(
                     text=_["CLOSE_BUTTON"],
                     callback_data="close",
