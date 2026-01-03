@@ -1,3 +1,12 @@
+# ==== PATCH for pyrogram GroupcallForbidden ====
+import pyrogram.errors
+
+if not hasattr(pyrogram.errors, "GroupcallForbidden"):
+    class GroupcallForbidden(Exception):
+        pass
+    pyrogram.errors.GroupcallForbidden = GroupcallForbidden
+# =============================================
+
 import asyncio
 import importlib
 from pyrogram import idle
