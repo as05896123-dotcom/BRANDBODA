@@ -8,16 +8,8 @@ from pyrogram.raw.functions.phone import CreateGroupCall
 from pyrogram.errors import ChatAdminRequired
 
 from pytgcalls import PyTgCalls
-from pytgcalls.exceptions import (
-    AlreadyJoinedError,
-    NoActiveGroupCall,
-)
-from pytgcalls.types import (
-    MediaStream,
-    AudioQuality,
-    VideoQuality,
-    Update,
-)
+from pytgcalls.exceptions import AlreadyJoinedError, NoActiveGroupCall
+from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update
 from pytgcalls.types.stream import StreamAudioEnded
 
 import config
@@ -38,12 +30,8 @@ from BrandrdXMusic.utils.database import (
 )
 
 from BrandrdXMusic.utils.exceptions import AssistantErr
-from BrandrdXMusic.utils.formatters import check_duration, seconds_to_min
 from BrandrdXMusic.utils.stream.autoclear import auto_clean
-from BrandrdXMusic.utils.inline.play import stream_markup, stream_markup2
-from BrandrdXMusic.utils.thumbnails import get_thumb
 from strings import get_string
-
 
 # =======================
 # Globals
@@ -51,7 +39,6 @@ from strings import get_string
 
 AUTOEND = {}
 QUEUE_LOCK = asyncio.Lock()
-loop = asyncio.get_event_loop_policy().get_event_loop()
 
 
 # =======================
@@ -61,6 +48,7 @@ loop = asyncio.get_event_loop_policy().get_event_loop()
 async def _clear_(chat_id: int):
     async with QUEUE_LOCK:
         db[chat_id] = []
+    AUTOEND.pop(chat_id, None)
     await remove_active_chat(chat_id)
     await remove_active_video_chat(chat_id)
 
@@ -154,6 +142,9 @@ class Call:
         language = await get_lang(chat_id)
         _ = get_string(language)
 
+        if not link.startswith("http") and not os.path.isfile(link):
+            raise AssistantErr(_["call_7"])
+
         stream = MediaStream(
             link,
             audio_parameters=AudioQuality.HIGH,
@@ -184,7 +175,6 @@ class Call:
         if video:
             await add_active_video_chat(chat_id)
 
-        # ✅ Auto-End watcher
         if await is_autoend():
             asyncio.create_task(self.autoend_watcher(chat_id))
 
@@ -193,39 +183,37 @@ class Call:
     # =======================
 
     async def change_stream(self, client: PyTgCalls, chat_id: int):
+
         async with QUEUE_LOCK:
             queue = db.get(chat_id)
-
-        if not queue:
-            await self.stop_stream(chat_id)
-            return
-
-        loop_count = await get_loop(chat_id)
-
-        if loop_count == 0:
-            popped = queue.pop(0)
-        else:
-            await set_loop(chat_id, loop_count - 1)
-            popped = None
+            if not queue:
+                return
+            loop_count = await get_loop(chat_id)
+            if loop_count == 0:
+                popped = queue.pop(0)
+            else:
+                await set_loop(chat_id, loop_count - 1)
+                popped = None
 
         await auto_clean(popped)
 
-        if not queue:
-            await self.stop_stream(chat_id)
-            return
+        async with QUEUE_LOCK:
+            if not db.get(chat_id):
+                await self.stop_stream(chat_id)
+                return
+            data = db[chat_id][0]
 
-        data = queue[0]
         file = data["file"]
         videoid = data["vidid"]
         streamtype = data["streamtype"]
 
-        # -------- YouTube handling --------
+        # -------- YouTube Logic (محفوظ بالكامل) --------
         if file.startswith(("vid_", "live_")):
             link = await YouTube.video(videoid, file.startswith("live_"))
         else:
             link = file
 
-        if not os.path.isfile(link) and not link.startswith("http"):
+        if not link.startswith("http") and not os.path.isfile(link):
             await self.stop_stream(chat_id)
             return
 
@@ -236,7 +224,11 @@ class Call:
             video_flags=None if streamtype == "video" else MediaStream.IGNORE,
         )
 
-        await client.change_stream(chat_id, stream)
+        try:
+            await client.change_stream(chat_id, stream)
+        except Exception as e:
+            LOGGER(__name__).error(e)
+            await self.stop_stream(chat_id)
 
     # =======================
     # Auto-End Watcher
