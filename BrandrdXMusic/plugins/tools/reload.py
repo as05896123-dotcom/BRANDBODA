@@ -8,7 +8,7 @@ from pyrogram.types import CallbackQuery, Message
 from BrandrdXMusic import app
 from BrandrdXMusic.core.call import Hotty
 from BrandrdXMusic.misc import db
-from BrandrdXMusic.utils.database import get_assistant, get_authuser_names, get_cmode
+from BrandrdXMusic.core.database import get_assistant, get_authuser_names, get_cmode
 from BrandrdXMusic.utils.decorators import ActualAdminCB, AdminActual, language
 from BrandrdXMusic.utils.formatters import alpha_to_int, get_readable_time
 from config import BANNED_USERS, adminlist, lyrical
