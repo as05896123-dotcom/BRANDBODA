@@ -27,4 +27,4 @@ SafoneAPI
 MukeshAPI
 openai
 httpx
-https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.23.zip
+pyrogram
