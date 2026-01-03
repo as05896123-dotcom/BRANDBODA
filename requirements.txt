@@ -42,3 +42,4 @@ pytz
 python-dateutil
 regex
 g4f
+telegraph
