@@ -3,6 +3,7 @@
 from .collections import *
 from .auth import *
 from .users import *
+from .chats import *        # ✅ لازم يكون موجود
 from .settings import *
 from .assistants import *
 from .stats import *
