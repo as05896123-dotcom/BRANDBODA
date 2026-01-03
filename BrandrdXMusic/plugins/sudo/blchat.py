@@ -3,31 +3,52 @@ from pyrogram.types import Message
 
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import SUDOERS
-from BrandrdXMusic.utils.database import blacklist_chat, blacklisted_chats, whitelist_chat
+
+# [CORE MIGRATION] استيراد دوال قاعدة البيانات من المسار الجديد
+from BrandrdXMusic.core.database import blacklist_chat, blacklisted_chats, whitelist_chat
 from config import BANNED_USERS
 
-# دالة حظر مجموعة من استخدام البوت
-@app.on_message(filters.command(["blchat", "blacklistchat", "حظر_مجموعة", "حظر_شات"]) & SUDOERS)
+# --- دالة مساعدة لاستخراج الآيدي من النص ---
+def extract_chat_id(text):
+    if not text:
+        return None
+    for word in text.split():
+        try:
+            # نحاول تحويل الكلمة لرقم (نتجاوز الكلمات العادية)
+            # الآيدي غالباً يبدأ بـ -100 للمجموعات
+            return int(word)
+        except ValueError:
+            continue
+    return None
+
+# ==========================================================
+# 1. حظر مجموعة
+# ==========================================================
+@app.on_message(filters.command(["blchat", "blacklistchat", "حظر"], prefixes=["", "/", "!", "."]) & SUDOERS)
 async def blacklist_chat_func(client, message: Message):
-    if len(message.command) != 2:
+    # نحاول استخراج الآيدي من الرسالة
+    chat_id = extract_chat_id(message.text)
+
+    # إذا لم يجد آيدي، نرسل رسالة التوضيح
+    if not chat_id:
         return await message.reply_text(
             "🥀 **طـريـقـة الاسـتـخـدام :**\n\n"
-            "• blchat [ايدي_المجموعة]\n"
-            "• حظر_مجموعة [ايدي_المجموعة]"
+            "يـجـب وضـع آيـدي الـمـجـمـوعـة بـجـانـب الأمـر.\n\n"
+            "**مـثـال:**\n"
+            "<code>حظر مجموعة -100123456789</code>\n"
+            "**أو:**\n"
+            "<code>blchat -100123456789</code>"
         )
     
-    try:
-        chat_id = int(message.text.strip().split()[1])
-    except ValueError:
-        return await message.reply_text("🥀 **عـذراً، يـجـب أن يـكـون الآيـدي أرقـامـاً فـقـط.**")
-
+    # التحقق هل هي محظورة مسبقاً
     if chat_id in await blacklisted_chats():
         return await message.reply_text("🧚 **هـذه الـمـجـمـوعـة مـحـظـورة بـالـفـعـل.**")
     
+    # تنفيذ الحظر
     blacklisted = await blacklist_chat(chat_id)
     if blacklisted:
         await message.reply_text(
-            "♥️ **تـم حـظـر الـمـجـمـوعـة مـن اسـتـخـدام الـبـوت بـنـجـاح.**"
+            f"♥️ **تـم حـظـر الـمـجـمـوعـة ({chat_id}) مـن اسـتـخـدام الـبـوت بـنـجـاح.**"
         )
         try:
             # محاولة مغادرة المجموعة بعد حظرها
@@ -38,20 +59,27 @@ async def blacklist_chat_func(client, message: Message):
         await message.reply_text("🥀 **حـدث خـطـأ أثـنـاء حـظـر الـمـجـمـوعـة.**")
 
 
-# دالة رفع الحظر عن مجموعة
-@app.on_message(filters.command(["whitelistchat", "unblacklistchat", "unblchat", "رفع_حظر", "رفع_الحظر"]) & SUDOERS)
+# ==========================================================
+# 2. رفع الحظر عن مجموعة
+# ==========================================================
+@app.on_message(filters.command(["whitelistchat", "unblchat", "رفع"], prefixes=["", "/", "!", "."]) & SUDOERS)
 async def white_funciton(client, message: Message):
-    if len(message.command) != 2:
+    # التأكد أن الأمر هو لرفع الحظر (لتجنب التداخل مع أوامر رفع أخرى)
+    if "حظر" not in message.text and "whitelist" not in message.text and "unbl" not in message.text:
+        # إذا كتب "رفع" فقط بدون سياق الحظر، نتجاهل الأمر (قد يكون رفع مشرف)
+        return
+
+    chat_id = extract_chat_id(message.text)
+
+    if not chat_id:
         return await message.reply_text(
             "🥀 **طـريـقـة الاسـتـخـدام :**\n\n"
-            "• unblchat [ايدي_المجموعة]\n"
-            "• رفع_حظر [ايدي_المجموعة]"
+            "يـجـب وضـع آيـدي الـمـجـمـوعـة بـجـانـب الأمـر.\n\n"
+            "**مـثـال:**\n"
+            "<code>رفع حظر -100123456789</code>\n"
+            "**أو:**\n"
+            "<code>unblchat -100123456789</code>"
         )
-    
-    try:
-        chat_id = int(message.text.strip().split()[1])
-    except ValueError:
-        return await message.reply_text("🥀 **عـذراً، يـجـب أن يـكـون الآيـدي أرقـامـاً فـقـط.**")
 
     if chat_id not in await blacklisted_chats():
         return await message.reply_text("🧚 **هـذه الـمـجـمـوعـة لـيـسـت مـحـظـورة أصـلاً.**")
@@ -59,22 +87,33 @@ async def white_funciton(client, message: Message):
     whitelisted = await whitelist_chat(chat_id)
     if whitelisted:
         return await message.reply_text(
-            "💝 **تـم رفـع الـحـظـر عـن الـمـجـمـوعـة بـنـجـاح.**"
+            f"💝 **تـم رفـع الـحـظـر عـن الـمـجـمـوعـة ({chat_id}) بـنـجـاح.**"
         )
     
     await message.reply_text("🥀 **حـدث خـطـأ أثـنـاء رفـع الـحـظـر.**")
 
 
-# دالة عرض قائمة المجموعات المحظورة
-@app.on_message(filters.command(["blchats", "blacklistedchats", "المجموعات_المحظورة"]) & ~BANNED_USERS)
+# ==========================================================
+# 3. عرض القائمة
+# ==========================================================
+@app.on_message(filters.command(["blchats", "المجموعات", "قائمة"], prefixes=["", "/", "!", "."]) & ~BANNED_USERS)
 async def all_chats(client, message: Message):
+    # التحقق من سياق الأمر (المجموعات المحظورة)
+    if "المجموعات" in message.text and "المحظورة" not in message.text:
+        return # تجاهل لو كتب "المجموعات" فقط
+    
+    if "قائمة" in message.text and "المحظورة" not in message.text and "bl" not in message.text:
+        return
+
     text = "🥀 **قـائـمـة الـمـجـمـوعـات الـمـحـظـورة :**\n\n"
     j = 0
-    for count, chat_id in enumerate(await blacklisted_chats(), 1):
+    blacklisted = await blacklisted_chats()
+    
+    for count, chat_id in enumerate(blacklisted, 1):
         try:
             title = (await app.get_chat(chat_id)).title
         except:
-            title = "مـجـمـوعـة خـاصـة"
+            title = "مـجـمـوعـة خـاصـة/مـحـذوفـة"
         j = 1
         text += f"**{count}. {title}** [`{chat_id}`]\n"
     
