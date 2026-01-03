@@ -5,7 +5,7 @@ apscheduler
 
 tgcrypto
 pyrogram>=2.0.0
-py-tgcalls>=3.0.0.dev1
+py-tgcalls==2.2.8
 
 motor
 pymongo
