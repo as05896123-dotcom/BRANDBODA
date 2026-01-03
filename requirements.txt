@@ -32,4 +32,4 @@ SafoneAPI
 MukeshAPI
 openai
 deep-translator
-lyricsgenius
+lyricsgenius==3.0.1
