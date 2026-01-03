@@ -15,7 +15,7 @@ from config import BANNED_USERS
 from strings import get_string
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import SUDOERS
-from BrandrdXMusic.utils.database import (
+from BrandrdXMusic.core.database import (
     get_assistant,
     get_cmode,
     get_lang,
