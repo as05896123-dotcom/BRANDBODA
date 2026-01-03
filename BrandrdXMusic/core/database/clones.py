@@ -1,6 +1,6 @@
 from .collections import usersdbc, chatsdbc
 from .users import is_served_user
-from .chats import is_served_chat
+from .music import is_served_chat   # ✅ التعديل هنا
 
 async def is_served_user_clone(user_id: int) -> bool:
     user = await usersdbc.find_one({"user_id": user_id})
