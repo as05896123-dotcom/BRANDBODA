@@ -1,7 +1,7 @@
 import time
 import asyncio
-from pyrogram import filters
-from pyrogram.enums import ChatType
+import os
+from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from youtubesearchpython.__future__ import VideosSearch
 
@@ -9,7 +9,11 @@ import config
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import _boot_
 from BrandrdXMusic.plugins.sudo.sudoers import sudoers_list
-from BrandrdXMusic.utils.database import (
+
+# -----------------------------------------------------------
+# [CORE MIGRATION] Import from Core Database Package
+# -----------------------------------------------------------
+from BrandrdXMusic.core.database import (
     add_served_chat,
     add_served_user,
     blacklisted_chats,
@@ -17,168 +21,184 @@ from BrandrdXMusic.utils.database import (
     is_banned_user,
     is_on_off,
 )
+
 from BrandrdXMusic.utils.decorators.language import LanguageStart
 from BrandrdXMusic.utils.formatters import get_readable_time
 from BrandrdXMusic.utils.inline import help_pannel, private_panel, start_panel
 from config import BANNED_USERS
 from strings import get_string
 
+
 @app.on_message(filters.command(["start"], prefixes=["/", "!", ".", ""]) & filters.private & ~BANNED_USERS)
 @LanguageStart
 async def start_pm(client, message: Message, _):
     await add_served_user(message.from_user.id)
     await message.react("❤️")
+    
+    # --- معالجة الأوامر الفرعية (Deep Linking) ---
     if len(message.text.split()) > 1:
         name = message.text.split(None, 1)[1]
+        
+        # Help Command
         if name[0:4] == "help":
             keyboard = help_pannel(_)
+            # يفضل عدم استخدام Sticker ID ثابت إذا تغير البوت، لكن سأتركه كما هو
             await message.reply_sticker("CAACAgUAAxkBAAM3aVdeWEHOfLJDs5xQlbanyV-qnwYAAgsVAAL68RlUwGZYcJD6wm4eBA")
             return await message.reply_photo(
                 photo=config.START_IMG_URL,
                 caption=_["help_1"].format(config.SUPPORT_CHAT),
                 reply_markup=keyboard,
             )
+        
+        # Sudo List
         if name[0:3] == "sud":
             await sudoers_list(client=client, message=message, _=_)
             try:
                 if await is_on_off(2):
-                    return await app.send_message(
+                    await app.send_message(
                         chat_id=config.LOGGER_ID,
                         text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **قـائـمـة الـمـطـوريـن**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
                     )
             except:
                 pass
             return
+            
+        # Info Command
         if name[0:3] == "inf":
             m = await message.reply_text("🔎")
             query = (str(name)).replace("info_", "", 1)
             query = f"https://www.youtube.com/watch?v={query}"
-            results = VideosSearch(query, limit=1)
-            for result in (await results.next())["result"]:
+            
+            try:
+                results = VideosSearch(query, limit=1)
+                result = (await results.next())["result"][0]
+                
                 title = result["title"]
                 duration = result["duration"]
-                views = result["viewCount"]["short"]
+                views = result.get("viewCount", {}).get("short", "N/A")
                 thumbnail = result["thumbnails"][0]["url"].split("?")[0]
-                channellink = result["channel"]["link"]
-                channel = result["channel"]["name"]
+                channellink = result.get("channel", {}).get("link", "N/A")
+                channel = result.get("channel", {}).get("name", "Unknown")
                 link = result["link"]
-                published = result["publishedTime"]
-            searched_text = _["start_6"].format(
-                title, duration, views, published, channellink, channel, app.mention
-            )
-            key = InlineKeyboardMarkup(
-                [
+                published = result.get("publishedTime", "Unknown")
+                
+                searched_text = _["start_6"].format(
+                    title, duration, views, published, channellink, channel, app.mention
+                )
+                key = InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(text=_["S_B_8"], url=link),
-                        InlineKeyboardButton(text=_["S_B_9"], url=config.SUPPORT_CHAT),
-                    ],
-                ]
-            )
-            await m.delete()
-            await app.send_photo(
-                chat_id=message.chat.id,
-                photo=thumbnail,
-                caption=searched_text,
-                reply_markup=key,
-            )
-            try:
+                        [
+                            InlineKeyboardButton(text=_["S_B_8"], url=link),
+                            InlineKeyboardButton(text=_["S_B_9"], url=config.SUPPORT_CHAT),
+                        ],
+                    ]
+                )
+                await m.delete()
+                await app.send_photo(
+                    chat_id=message.chat.id,
+                    photo=thumbnail,
+                    caption=searched_text,
+                    reply_markup=key,
+                )
+                
                 if await is_on_off(2):
-                    return await app.send_message(
+                    await app.send_message(
                         chat_id=config.LOGGER_ID,
                         text=f"{message.from_user.mention} بـدأ البـوت للـتـحـقـق مـن **مـعـلـومـات الـمـقـطـع**.\n\n**الـآيـدي :** <code>{message.from_user.id}</code>\n**الـمـعـرف :** @{message.from_user.username}",
                     )
-            except:
-                pass
-    else:
+            except Exception as e:
+                await m.edit_text("لم يتم العثور على معلومات.")
+            return
 
+    # --- القائمة الرئيسية (Start العادية) ---
+    else:
+        lols = None
         try:
             out = private_panel(_)
             
-            # --- بداية الانيميشن البطيء ---
+            # --- الانيميشن (Animation) ---
             lol = await message.reply_text("اهـلاً بـك عـزيـزي ♡ {}.. 🥀".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💞".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤍".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. ♥️".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 🤎".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-            await lol.edit_text("اهـلاً بـك عـزيـزي ♡ {}.. 💕".format(message.from_user.mention))
-            await asyncio.sleep(0.4)
-               
+            animations = ["💞", "🤍", "♥️", "🤎", "💕"]
+            for emoji in animations:
+                await asyncio.sleep(0.3) # تقليل الوقت قليلاً لتسريع الاستجابة
+                try:
+                    await lol.edit_text(f"اهـلاً بـك عـزيـزي ♡ {message.from_user.mention}.. {emoji}")
+                except:
+                    pass
+            
             await lol.delete()
             
+            # Loading Animation
             lols = await message.reply_text("**💝 جـ**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("🥀 جـارِ")        
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**💞 جـارِ الـ**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**🤍 جـارِ الـتـشـ**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**♥️ جـارِ الـتـشـغـيـ**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**🤎 جـارِ الـتـشـغـيـل**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**💕 جـارِ الـتـشـغـيـل...**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**💝 تـم الـتـشـغـيـل**")
-            await asyncio.sleep(0.5)
+            loading_texts = [
+                "🥀 جـارِ", "**💞 جـارِ الـ**", "**🤍 جـارِ الـتـشـ**",
+                "**♥️ جـارِ الـتـشـغـيـ**", "**🤎 جـارِ الـتـشـغـيـل**",
+                "**💕 جـارِ الـتـشـغـيـل...**", "**💝 تـم الـتـشـغـيـل**",
+                "**🥀 تـم الـتـشـغـيـل**", "**💞 تـم الـتـشـغـيـل**",
+                "**🤍 تـم الـتـشـغـيـل**"
+            ]
+            
+            for text in loading_texts:
+                await asyncio.sleep(0.3)
+                try:
+                    await lols.edit_text(text)
+                except:
+                    pass
 
-            await lols.edit_text("**🥀 تـم الـتـشـغـيـل**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**💞 تـم الـتـشـغـيـل**")
-            await asyncio.sleep(0.5)
-            await lols.edit_text("**🤍 تـم الـتـشـغـيـل**")
-            # --- نهاية الانيميشن ---
-
+            # Sticker
             m = await message.reply_sticker("CAACAgUAAxkBAAM3aVdeWEHOfLJDs5xQlbanyV-qnwYAAgsVAAL68RlUwGZYcJD6wm4eBA")
             
-            # --- إصلاح مشكلة الصورة (الحل النهائي) ---
-            # نجعل الافتراضي هو صورة البوت
+            # --- التعامل مع صورة البروفايل (Safe Implementation) ---
             chat_photo = config.START_IMG_URL
+            temp_photo_path = None
             
-            # نحاول تحميل صورة العضو، لو فشل يظل على صورة البوت
             if message.chat.photo:
                 try:
-                    userss_photo = await app.download_media(message.chat.photo.big_file_id)
-                    if userss_photo:
-                        chat_photo = userss_photo
+                    # تحميل الصورة إلى ملف مؤقت
+                    temp_photo_path = await app.download_media(message.chat.photo.big_file_id)
+                    chat_photo = temp_photo_path
                 except:
-                    # في حالة الفشل نستخدم صورة البوت
                     chat_photo = config.START_IMG_URL
 
+            # إرسال الرسالة النهائية
+            await message.reply_photo(
+                photo=chat_photo,
+                caption=_["start_2"].format(message.from_user.mention, app.mention),
+                reply_markup=InlineKeyboardMarkup(out),
+            )
+            
+            # [CRITICAL] تنظيف الملف المؤقت لمنع امتلاء السيرفر
+            if temp_photo_path and os.path.exists(temp_photo_path):
+                try:
+                    os.remove(temp_photo_path)
+                except:
+                    pass
+
         except Exception as e:
-            # أي خطأ آخر، نستخدم صورة البوت
-            chat_photo = config.START_IMG_URL
-            print(f"Error in start animation: {e}")
+            # Fallback في حالة حدوث خطأ كارثي
+            await message.reply_photo(
+                photo=config.START_IMG_URL,
+                caption=_["start_2"].format(message.from_user.mention, app.mention),
+                reply_markup=InlineKeyboardMarkup(out),
+            )
         
-        # تنظيف الرسائل القديمة
+        # تنظيف رسائل الانيميشن
         try:
-            await lols.delete()
-            await m.delete()
+            if lols: await lols.delete()
+            if m: await m.delete()
         except:
             pass
 
-        # إرسال رسالة الترحيب النهائية (مضمونة الآن)
-        await message.reply_photo(
-            photo=chat_photo,
-            caption=_["start_2"].format(message.from_user.mention, app.mention),
-            reply_markup=InlineKeyboardMarkup(out),
-        )
-
+        # Logger
         try:
             if config.LOGGER_ID:
-                sender_id = message.from_user.id
-                sender_name = message.from_user.first_name
                 await app.send_message(
                     config.LOGGER_ID,
-                    f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {sender_id}\n**الـاسـم : {sender_name}",
+                    f"{message.from_user.mention} بـدأ الـبـوت. \n\n**الـآيـدي : {message.from_user.id}\n**الـاسـم : {message.from_user.first_name}",
                 )
         except:
             pass
+
 
 @app.on_message(filters.command(["start"], prefixes=["/", "!", ".", ""]) & filters.group & ~BANNED_USERS)
 @LanguageStart
@@ -199,15 +219,20 @@ async def welcome(client, message: Message):
         try:
             language = await get_lang(message.chat.id)
             _ = get_string(language)
+            
+            # Check Ban
             if await is_banned_user(member.id):
                 try:
                     await message.chat.ban_member(member.id)
                 except:
                     pass
+            
+            # Welcome Logic for Bot
             if member.id == app.id:
-                if message.chat.type != ChatType.SUPERGROUP:
+                if message.chat.type != enums.ChatType.SUPERGROUP:
                     await message.reply_text(_["start_4"])
                     return await app.leave_chat(message.chat.id)
+                
                 if message.chat.id in await blacklisted_chats():
                     await message.reply_text(
                         _["start_5"].format(
@@ -232,5 +257,6 @@ async def welcome(client, message: Message):
                 )
                 await add_served_chat(message.chat.id)
                 await message.stop_propagation()
-        except Exception as ex:
-            print(ex)
+        except Exception:
+            # Silent fail is better for welcome handlers to avoid log spam
+            pass
