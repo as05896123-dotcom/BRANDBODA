@@ -1,7 +1,8 @@
+# core/call.py
+
 import os
 import asyncio
 from datetime import datetime, timedelta
-from typing import Union
 
 from pyrogram import Client
 from pyrogram.raw.functions.phone import CreateGroupCall
@@ -16,16 +17,20 @@ import config
 from BrandrdXMusic import LOGGER, app, YouTube
 from BrandrdXMusic.misc import db
 
+# ===== Database (NEW STRUCTURE) =====
+from BrandrdXMusic.core.database.assistants import group_assistant
+from BrandrdXMusic.core.database.settings import (
+    get_lang,
+    get_loop,
+    set_loop,
+    is_autoend,
+)
+from BrandrdXMusic.core.database.queries import set_queries
 from BrandrdXMusic.utils.database import (
     add_active_chat,
     add_active_video_chat,
     remove_active_chat,
     remove_active_video_chat,
-    get_lang,
-    get_loop,
-    set_loop,
-    group_assistant,
-    is_autoend,
     music_on,
 )
 
@@ -128,16 +133,10 @@ class Call:
             pass
 
     # =======================
-    # Join Call (V3 Safe)
+    # Join Call (PyTgCalls V3)
     # =======================
 
-    async def join_call(
-        self,
-        chat_id: int,
-        original_chat_id: int,
-        link: str,
-        video: bool = False,
-    ):
+    async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: bool = False):
         assistant = await group_assistant(self, chat_id)
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -172,6 +171,8 @@ class Call:
 
         await add_active_chat(chat_id)
         await music_on(chat_id)
+        await set_queries(1)
+
         if video:
             await add_active_video_chat(chat_id)
 
@@ -183,11 +184,12 @@ class Call:
     # =======================
 
     async def change_stream(self, client: PyTgCalls, chat_id: int):
-
         async with QUEUE_LOCK:
             queue = db.get(chat_id)
             if not queue:
+                await self.stop_stream(chat_id)
                 return
+
             loop_count = await get_loop(chat_id)
             if loop_count == 0:
                 popped = queue.pop(0)
@@ -207,7 +209,7 @@ class Call:
         videoid = data["vidid"]
         streamtype = data["streamtype"]
 
-        # -------- YouTube Logic (محفوظ بالكامل) --------
+        # ===== YouTube Logic (SAFE – UNTOUCHED) =====
         if file.startswith(("vid_", "live_")):
             link = await YouTube.video(videoid, file.startswith("live_"))
         else:
