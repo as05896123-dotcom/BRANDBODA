@@ -7,19 +7,10 @@ from pyrogram.raw.functions.phone import CreateGroupCall
 from pyrogram.errors import ChatAdminRequired
 
 from pytgcalls import PyTgCalls
-
-# =======================
-# PyTgCalls Compatibility (2.2.8 / 3.x)
-# =======================
-try:
-    # py-tgcalls 3.x
-    from pytgcalls.exceptions import AlreadyInCallError, NoActiveGroupCall
-except ImportError:
-    # py-tgcalls 2.2.8
-    from pytgcalls.exceptions import AlreadyJoinedError, GroupCallNotFoundError
-    AlreadyInCallError = AlreadyJoinedError
-    NoActiveGroupCall = GroupCallNotFoundError
-
+from pytgcalls.exceptions import (
+    NoActiveGroupCall,
+    PyTgCallsAlreadyRunning,
+)
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update
 from pytgcalls.types.stream import StreamAudioEnded
 
@@ -184,7 +175,7 @@ class Call:
             except (ChatAdminRequired, Exception):
                 raise AssistantErr(_["call_8"])
 
-        except AlreadyInCallError:
+        except PyTgCallsAlreadyRunning:
             raise AssistantErr(_["call_9"])
 
         await add_active_chat(chat_id)
