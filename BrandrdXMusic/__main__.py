@@ -16,7 +16,7 @@ from BrandrdXMusic import LOGGER, app, userbot
 from BrandrdXMusic.core.call import Hotty
 from BrandrdXMusic.misc import sudo
 from BrandrdXMusic.plugins import ALL_MODULES
-from BrandrdXMusic.utils.database import get_banned_users, get_gbanned
+from BrandrdXMusic.core.database import get_banned_users, get_gbanned
 from config import BANNED_USERS
 
 
