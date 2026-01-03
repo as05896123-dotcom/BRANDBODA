@@ -1,45 +1,65 @@
+# ===== Core Async & Networking =====
 aiofiles
 aiohttp
 httpx
 apscheduler
 
+# ===== Telegram =====
 tgcrypto
 pyrogram==2.0.106
 py-tgcalls==2.2.8
 ntgcalls==2.0.6
+telethon
 
+# ===== Database =====
 motor
 pymongo
 dnspython
 
+# ===== Media / Music =====
 yt-dlp>=2023.07.06
 youtube-search-python
+youtube_search
 spotipy
 gTTS
 pillow
 hachoir
+opencv-python-headless
 
+# ===== Config / Utils =====
 python-dotenv
 pyyaml
 psutil
-
-speedtest-cli
-GitPython
-heroku3
-
-telethon
-SafoneAPI
-MukeshAPI
-openai
-deep-translator
-
-lyricsgenius==3.0.1
-Unidecode
-
 requests
 urllib3
 pytz
 python-dateutil
 regex
+future
+wget
+qrcode
+
+# ===== Speed / System =====
+speedtest-cli
+GitPython
+heroku3
+
+# ===== APIs =====
+SafoneAPI
+MukeshAPI
+openai
+deep-translator
+lexica-api
 g4f
+
+# ===== Text / Language =====
+lyricsgenius==3.0.1
+Unidecode
+
+# ===== Images / Search =====
+bing_image_downloader
+googlesearch-python
+search_engine_parser
+
+# ===== Telegraph =====
 telegraph
