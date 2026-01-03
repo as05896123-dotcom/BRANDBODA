@@ -1,15 +1,14 @@
 # ======================================
-# BrandrdXMusic - Main Package Init
+# BrandrdXMusic - Package Init (SAFE)
 # ======================================
 
-import asyncio
-import logging
-import sys
+# ❌ ممنوع import logging هنا
+# ❌ ممنوع logging.basicConfig
 
 from BrandrdXMusic.logging import LOGGER
 
 # ===============================
-# Core imports
+# Core
 # ===============================
 
 from BrandrdXMusic.core.bot import Hotty as _BotClient
@@ -18,44 +17,30 @@ from BrandrdXMusic.core.dir import dirr
 from BrandrdXMusic.misc import dbb, heroku
 
 # ===============================
-# External APIs
+# Environment setup
 # ===============================
 
-try:
-    from SafoneAPI import SafoneAPI
-except Exception:
-    SafoneAPI = None
-
-# ===============================
-# تهيئة المجلدات والبيئة
-# ===============================
-
-dirr()       # إنشاء الفولدرات
-dbb()        # تهيئة قواعد البيانات
-heroku()     # Heroku env (لو موجود)
-
-# ===============================
-# Logging
-# ===============================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s - %(levelname)s] - %(name)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+dirr()
+dbb()
+heroku()
 
 # ===============================
 # Clients
 # ===============================
 
-app = _BotClient()          # البوت الأساسي
-userbot = _UserbotClient() # الحساب المساعد
+app = _BotClient()
+userbot = _UserbotClient()
 
 # ===============================
-# API Object
+# External API
 # ===============================
 
-api = SafoneAPI() if SafoneAPI else None
+try:
+    from SafoneAPI import SafoneAPI
+    api = SafoneAPI()
+except Exception:
+    api = None
+    LOGGER(__name__).warning("⚠️ SafoneAPI غير متوفر")
 
 # ===============================
 # Platforms
