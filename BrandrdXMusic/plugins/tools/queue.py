@@ -9,7 +9,7 @@ import config
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import db
 from BrandrdXMusic.utils import HottyBin, get_channeplayCB, seconds_to_min
-from BrandrdXMusic.utils.database import get_cmode, is_active_chat, is_music_playing
+from BrandrdXMusic.core.database import get_cmode, is_active_chat, is_music_playing
 from BrandrdXMusic.utils.decorators.language import language, languageCB
 from BrandrdXMusic.utils.inline import queue_back_markup, queue_markup
 from config import BANNED_USERS
@@ -278,3 +278,4 @@ async def queue_back(client, CallbackQuery: CallbackQuery, _):
                     break
         except:
             return
+
