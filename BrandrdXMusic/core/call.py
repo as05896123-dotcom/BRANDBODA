@@ -45,7 +45,7 @@ from strings import get_string
 # =======================
 
 AUTOEND = {}
-autoend = AUTOEND   # 🔥 مهم جدًا: عشان autoleave.py
+autoend = AUTOEND
 QUEUE_LOCK = asyncio.Lock()
 
 
@@ -107,6 +107,7 @@ class Call:
         self.four = PyTgCalls(self.userbot4)
         self.five = PyTgCalls(self.userbot5)
 
+
     # =======================
     # Basic Controls
     # =======================
@@ -135,17 +136,12 @@ class Call:
         except Exception:
             pass
 
+
     # =======================
     # Join Call
     # =======================
 
-    async def join_call(
-        self,
-        chat_id: int,
-        original_chat_id: int,
-        link: str,
-        video: bool = False,
-    ):
+    async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: bool = False):
         assistant = await group_assistant(self, chat_id)
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -188,6 +184,7 @@ class Call:
         if await is_autoend():
             asyncio.create_task(self.autoend_watcher(chat_id))
 
+
     # =======================
     # Change Stream
     # =======================
@@ -200,11 +197,9 @@ class Call:
                 return
 
             loop_count = await get_loop(chat_id)
-            if loop_count == 0:
-                popped = queue.pop(0)
-            else:
+            popped = queue.pop(0) if loop_count == 0 else None
+            if loop_count > 0:
                 await set_loop(chat_id, loop_count - 1)
-                popped = None
 
         await auto_clean(popped)
 
@@ -218,10 +213,7 @@ class Call:
         videoid = data["vidid"]
         streamtype = data["streamtype"]
 
-        if file.startswith(("vid_", "live_")):
-            link = await YouTube.video(videoid, file.startswith("live_"))
-        else:
-            link = file
+        link = await YouTube.video(videoid, file.startswith("live_")) if file.startswith(("vid_", "live_")) else file
 
         if not link.startswith("http") and not os.path.isfile(link):
             await self.stop_stream(chat_id)
@@ -239,6 +231,7 @@ class Call:
         except Exception as e:
             LOGGER(__name__).error(e)
             await self.stop_stream(chat_id)
+
 
     # =======================
     # Auto-End Watcher
@@ -267,44 +260,32 @@ class Call:
                 AUTOEND.pop(chat_id, None)
                 return
 
+
     # =======================
-    # Start & Decorators
+    # Start & Decorators (SAFE)
     # =======================
 
     async def start(self):
         LOGGER(__name__).info("Starting PyTgCalls Clients...")
-        await self.one.start()
-        await self.two.start()
-        await self.three.start()
-        await self.four.start()
-        await self.five.start()
+
+        for idx, client in enumerate(
+            [self.one, self.two, self.three, self.four, self.five], start=1
+        ):
+            try:
+                await client.start()
+                LOGGER(__name__).info(f"✅ Assistant {idx} started")
+            except Exception as e:
+                LOGGER(__name__).warning(f"⚠️ Assistant {idx} skipped: {e}")
 
     async def decorators(self):
-
-        @self.one.on_stream_end()
-        async def _(client, update: Update):
-            if update.status == "ended":
-                await self.change_stream(client, update.chat_id)
-
-        @self.two.on_stream_end()
-        async def _(client, update: Update):
-            if update.status == "ended":
-                await self.change_stream(client, update.chat_id)
-
-        @self.three.on_stream_end()
-        async def _(client, update: Update):
-            if update.status == "ended":
-                await self.change_stream(client, update.chat_id)
-
-        @self.four.on_stream_end()
-        async def _(client, update: Update):
-            if update.status == "ended":
-                await self.change_stream(client, update.chat_id)
-
-        @self.five.on_stream_end()
-        async def _(client, update: Update):
-            if update.status == "ended":
-                await self.change_stream(client, update.chat_id)
+        for client in [self.one, self.two, self.three, self.four, self.five]:
+            try:
+                @client.on_stream_end()
+                async def _(c, update: Update):
+                    if update.status == "ended":
+                        await self.change_stream(c, update.chat_id)
+            except Exception:
+                continue
 
 
 # =======================
