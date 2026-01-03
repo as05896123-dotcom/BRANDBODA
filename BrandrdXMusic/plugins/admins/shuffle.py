@@ -5,7 +5,7 @@ from pyrogram.types import Message
 
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import db
-from BrandrdXMusic.utils.decorators import AdminRightsCheck
+from BrandrdXMusic.core.decorators import AdminRightsCheck
 from BrandrdXMusic.utils.inline import close_markup
 from config import BANNED_USERS
 
