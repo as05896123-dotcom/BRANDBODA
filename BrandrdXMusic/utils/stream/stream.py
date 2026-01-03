@@ -9,10 +9,13 @@ from BrandrdXMusic import app, YouTube
 from BrandrdXMusic.core.call import Hotty
 from BrandrdXMusic.misc import db
 from BrandrdXMusic.utils import seconds_to_min, time_to_seconds
-from BrandrdXMusic.utils.database import (
+
+# [CORE MIGRATION] تعديل المسار
+from BrandrdXMusic.core.database import (
     add_active_video_chat,
     is_active_chat,
 )
+
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.inline import (
     aq_markup,
@@ -43,7 +46,8 @@ async def stream(
         return
 
     if forceplay:
-        await Hotty.force_stop_stream(chat_id)
+        # [FIX] استبدال force_stop_stream بـ stop_stream
+        await Hotty.stop_stream(chat_id)
 
     # 1. PLAYLIST
     if streamtype == "playlist":
@@ -95,12 +99,12 @@ async def stream(
                 except:
                     return await mystic.edit_text(_["play_3"])
 
+                # [FIX] إزالة image
                 await Hotty.join_call(
                     chat_id,
                     original_chat_id,
                     file_path,
                     video=status,
-                    image=thumbnail,
                 )
                 await put_queue(
                     chat_id,
@@ -210,12 +214,13 @@ async def stream(
         else:
             if not forceplay:
                 db[chat_id] = []
+            
+            # [FIX] إزالة image
             await Hotty.join_call(
                 chat_id,
                 original_chat_id,
                 file_path,
                 video=status,
-                image=thumbnail,
             )
             await put_queue(
                 chat_id,
@@ -411,12 +416,13 @@ async def stream(
             n, file_path = await YouTube.video(link)
             if n == 0:
                 raise AssistantErr(_["str_3"])
+            
+            # [FIX] إزالة image
             await Hotty.join_call(
                 chat_id,
                 original_chat_id,
                 file_path,
                 video=status,
-                image=thumbnail if thumbnail else None,
             )
             await put_queue(
                 chat_id,
@@ -480,6 +486,8 @@ async def stream(
         else:
             if not forceplay:
                 db[chat_id] = []
+            
+            # [FIX] إزالة image (تأكدنا من عدم وجوده أصلاً هنا ولكن للفحص)
             await Hotty.join_call(
                 chat_id,
                 original_chat_id,
