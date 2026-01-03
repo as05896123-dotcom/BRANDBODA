@@ -1,48 +1,63 @@
 from .collections import gbansdb, sudoersdb
 
+# ===================== GBANS =====================
+
 async def get_gbanned() -> list:
     results = []
     async for user in gbansdb.find({"user_id": {"$gt": 0}}):
-        user_id = user["user_id"]
-        results.append(user_id)
+        user_id = user.get("user_id")
+        if user_id:
+            results.append(user_id)
     return results
+
 
 async def is_gbanned_user(user_id: int) -> bool:
     user = await gbansdb.find_one({"user_id": user_id})
-    if not user:
-        return False
-    return True
+    return bool(user)
+
 
 async def add_gban_user(user_id: int):
-    is_gbanned = await is_gbanned_user(user_id)
-    if is_gbanned:
+    if await is_gbanned_user(user_id):
         return
-    return await gbansdb.insert_one({"user_id": user_id})
+    await gbansdb.insert_one({"user_id": user_id})
+
 
 async def remove_gban_user(user_id: int):
-    is_gbanned = await is_gbanned_user(user_id)
-    if not is_gbanned:
+    if not await is_gbanned_user(user_id):
         return
-    return await gbansdb.delete_one({"user_id": user_id})
+    await gbansdb.delete_one({"user_id": user_id})
+
+
+# ===================== SUDO =====================
 
 async def get_sudoers() -> list:
-    sudoers = await sudoersdb.find_one({"sudo": "sudo"})
-    if not sudoers:
+    data = await sudoersdb.find_one({"sudo": "sudo"})
+    if not data:
         return []
-    return sudoers["sudoers"]
+    return data.get("sudoers", [])
+
 
 async def add_sudo(user_id: int) -> bool:
     sudoers = await get_sudoers()
+    if user_id in sudoers:
+        return True
     sudoers.append(user_id)
     await sudoersdb.update_one(
-        {"sudo": "sudo"}, {"$set": {"sudoers": sudoers}}, upsert=True
+        {"sudo": "sudo"},
+        {"$set": {"sudoers": sudoers}},
+        upsert=True,
     )
     return True
 
+
 async def remove_sudo(user_id: int) -> bool:
     sudoers = await get_sudoers()
+    if user_id not in sudoers:
+        return True
     sudoers.remove(user_id)
     await sudoersdb.update_one(
-        {"sudo": "sudo"}, {"$set": {"sudoers": sudoers}}, upsert=True
+        {"sudo": "sudo"},
+        {"$set": {"sudoers": sudoers}},
+        upsert=True,
     )
     return True
