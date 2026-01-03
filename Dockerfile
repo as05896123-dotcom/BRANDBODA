@@ -10,10 +10,10 @@ WORKDIR /app/
 
 COPY requirements.txt .
 
-# هنا التعديل: بنثبت المتطلبات، وبعدها بنجبره يرجع النسخ القديمة الشغالة
+# هنا التعديل: غيرنا الرقم لـ 0.9.7 عشان ده اللي موجود
 RUN python3 -m pip install --upgrade pip setuptools \
     && pip3 install --no-cache-dir --upgrade --requirement requirements.txt \
-    && pip3 install --force-reinstall pyrogram==2.0.106 py-tgcalls==0.9.9
+    && pip3 install --force-reinstall pyrogram==2.0.106 py-tgcalls==0.9.7
 
 COPY . .
 
