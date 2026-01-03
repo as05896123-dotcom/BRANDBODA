@@ -5,7 +5,7 @@ apscheduler
 
 tgcrypto
 pyrogram==2.0.106
-py-tgcalls @ git+https://github.com/pytgcalls/pytgcalls.git@dev
+py-tgcalls @ git+https://github.com/pytgcalls/pytgcalls.git
 
 motor
 pymongo
