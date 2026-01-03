@@ -33,3 +33,4 @@ MukeshAPI
 openai
 deep-translator
 lyricsgenius==3.0.1
+Unidecode
