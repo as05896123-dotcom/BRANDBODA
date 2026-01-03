@@ -1,109 +1,135 @@
 import random
+
 from BrandrdXMusic import userbot
 from .collections import assdb, assistantdict
 
-async def get_assistant_number(chat_id: int) -> str:
-    assistant = assistantdict.get(chat_id)
-    return assistant
+
+# ======================
+# Helpers
+# ======================
 
 async def get_client(assistant: int):
-    if int(assistant) == 1:
+    assistant = int(assistant)
+    if assistant == 1:
         return userbot.one
-    elif int(assistant) == 2:
+    elif assistant == 2:
         return userbot.two
-    elif int(assistant) == 3:
+    elif assistant == 3:
         return userbot.three
-    elif int(assistant) == 4:
+    elif assistant == 4:
         return userbot.four
-    elif int(assistant) == 5:
+    elif assistant == 5:
         return userbot.five
+    return None
 
-async def set_assistant_new(chat_id, number):
+
+# ======================
+# Assistant Selectors
+# ======================
+
+async def set_assistant_new(chat_id: int, number: int):
     number = int(number)
+    assistantdict[chat_id] = number
     await assdb.update_one(
         {"chat_id": chat_id},
         {"$set": {"assistant": number}},
         upsert=True,
     )
 
-async def set_assistant(chat_id):
+
+async def set_assistant(chat_id: int):
     from BrandrdXMusic.core.userbot import assistants
+
+    if not assistants:
+        raise RuntimeError("No assistants available")
 
     ran_assistant = random.choice(assistants)
     assistantdict[chat_id] = ran_assistant
+
     await assdb.update_one(
         {"chat_id": chat_id},
         {"$set": {"assistant": ran_assistant}},
         upsert=True,
     )
-    userbot = await get_client(ran_assistant)
-    return userbot
 
-async def get_assistant(chat_id: int) -> str:
+    return await get_client(ran_assistant)
+
+
+async def get_assistant(chat_id: int):
     from BrandrdXMusic.core.userbot import assistants
 
+    if not assistants:
+        raise RuntimeError("No assistants available")
+
     assistant = assistantdict.get(chat_id)
+
     if not assistant:
         dbassistant = await assdb.find_one({"chat_id": chat_id})
         if not dbassistant:
-            userbot = await set_assistant(chat_id)
-            return userbot
-        else:
-            got_assis = dbassistant["assistant"]
-            if got_assis in assistants:
-                assistantdict[chat_id] = got_assis
-                userbot = await get_client(got_assis)
-                return userbot
-            else:
-                userbot = await set_assistant(chat_id)
-                return userbot
-    else:
-        if assistant in assistants:
-            userbot = await get_client(assistant)
-            return userbot
-        else:
-            userbot = await set_assistant(chat_id)
-            return userbot
+            return await set_assistant(chat_id)
 
-async def set_calls_assistant(chat_id):
+        assistant = dbassistant.get("assistant")
+
+    if assistant in assistants:
+        assistantdict[chat_id] = assistant
+        client = await get_client(assistant)
+        if client:
+            return client
+
+    return await set_assistant(chat_id)
+
+
+# ======================
+# Calls (PyTgCalls)
+# ======================
+
+async def set_calls_assistant(chat_id: int):
     from BrandrdXMusic.core.userbot import assistants
+
+    if not assistants:
+        raise RuntimeError("No assistants available")
 
     ran_assistant = random.choice(assistants)
     assistantdict[chat_id] = ran_assistant
+
     await assdb.update_one(
         {"chat_id": chat_id},
         {"$set": {"assistant": ran_assistant}},
         upsert=True,
     )
+
     return ran_assistant
 
-async def group_assistant(self, chat_id: int) -> int:
+
+async def group_assistant(self, chat_id: int):
     from BrandrdXMusic.core.userbot import assistants
 
+    if not assistants:
+        raise RuntimeError("No assistants available")
+
     assistant = assistantdict.get(chat_id)
+
     if not assistant:
         dbassistant = await assdb.find_one({"chat_id": chat_id})
         if not dbassistant:
-            assis = await set_calls_assistant(chat_id)
+            assistant = await set_calls_assistant(chat_id)
         else:
-            assis = dbassistant["assistant"]
-            if assis in assistants:
-                assistantdict[chat_id] = assis
-                assis = assis
-            else:
-                assis = await set_calls_assistant(chat_id)
-    else:
-        if assistant in assistants:
-            assis = assistant
-        else:
-            assis = await set_calls_assistant(chat_id)
-    if int(assis) == 1:
+            assistant = dbassistant.get("assistant")
+
+    if assistant not in assistants:
+        assistant = await set_calls_assistant(chat_id)
+
+    assistantdict[chat_id] = assistant
+
+    if assistant == 1:
         return self.one
-    elif int(assis) == 2:
+    elif assistant == 2:
         return self.two
-    elif int(assis) == 3:
+    elif assistant == 3:
         return self.three
-    elif int(assis) == 4:
+    elif assistant == 4:
         return self.four
-    elif int(assis) == 5:
+    elif assistant == 5:
         return self.five
+
+    raise RuntimeError("Invalid assistant selected")
