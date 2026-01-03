@@ -221,11 +221,11 @@ stream_1 : "<b><blockquote>➲ بــدأ الــتــشــغــيــل |</
 stream_2 : "<b><blockquote>➲ بــدأ الــتــشــغــيــل |</blockquote></b>\n\n<b><blockquote>➠ الــنــوع :</b> بــث مــبــاشــر [URL]\n<b>➠ طــلــب مــن :</b> {0}</blockquote>"
 
 #General
-CLOSE_BUTTON  : "🤍 إغــلاق 🤍"
-CLOSEMENU_BUTTON  : "🤍 إغــلاق 🤍"
-BACK_BUTTON : "🤍 رجــوع 🤍"
-NEXT_PAGE: "🤍"
-BACK_PAGE: "🤍"
+CLOSE_BUTTON  : "• إغــلاق •"
+CLOSEMENU_BUTTON  : "• إغــلاق •"
+BACK_BUTTON : "• رجــوع •"
+NEXT_PAGE: "▷"
+BACK_PAGE: "◁"
 UNBAN_BUTTON : "• رفــع حــظــر •"
 
 #Lyrics
