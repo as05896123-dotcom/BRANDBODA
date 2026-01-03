@@ -3,12 +3,16 @@ import os
 import re
 from typing import Union
 import yt_dlp
+import aiohttp
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from youtubesearchpython.__future__ import VideosSearch
 from BrandrdXMusic.utils.formatters import time_to_seconds
-import aiohttp
 from BrandrdXMusic import LOGGER
+
+# --- إعدادات المجلد ---
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # --- إعدادات الـ API ---
 YOUR_API_URL = None
@@ -44,11 +48,73 @@ except RuntimeError:
     pass
 
 
-# --- دوال التحميل (Audio / Video) ---
+# --- دوال التحميل المحلية (YT-DLP) ---
+
+async def download_song_ytdlp(link: str) -> Union[str, None]:
+    try:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
+            "quiet": True,
+            "no_warnings": True,
+            "geo_bypass": True,
+            "nocheckcertificate": True,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(link, download=True)
+            video_id = info.get("id")
+
+        file_path = f"{DOWNLOAD_DIR}/{video_id}.mp3"
+        if os.path.exists(file_path):
+            return file_path
+        return None
+
+    except Exception as e:
+        LOGGER(__name__).error(f"yt-dlp audio error: {e}")
+        return None
+
+
+async def download_video_ytdlp(link: str) -> Union[str, None]:
+    try:
+        ydl_opts = {
+            "format": "bestvideo+bestaudio/best",
+            "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
+            "quiet": True,
+            "no_warnings": True,
+            "geo_bypass": True,
+            "nocheckcertificate": True,
+            "merge_output_format": "mp4",
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(link, download=True)
+            video_id = info.get("id")
+            ext = info.get("ext", "mp4")
+
+        file_path = f"{DOWNLOAD_DIR}/{video_id}.{ext}"
+        if os.path.exists(file_path):
+            return file_path
+        return None
+
+    except Exception as e:
+        LOGGER(__name__).error(f"yt-dlp video error: {e}")
+        return None
+
+
+# --- دوال التحميل الهجينة (API + Fallback) ---
 
 async def download_song(link: str) -> str:
     global YOUR_API_URL
     
+    # 1. محاولة التحميل عبر الـ API
     if not YOUR_API_URL:
         await load_api_url()
         if not YOUR_API_URL:
@@ -57,10 +123,8 @@ async def download_song(link: str) -> str:
     video_id = link.split('v=')[-1].split('&')[0] if 'v=' in link else link
 
     if not video_id or len(video_id) < 3:
-        return None
+        return await download_song_ytdlp(link) # Fallback immediately
 
-    DOWNLOAD_DIR = "downloads"
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp3")
 
     # لو الملف موجود بالفعل، لا داعي لإعادة تحميله
@@ -76,45 +140,42 @@ async def download_song(link: str) -> str:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=60)
             ) as response:
-                if response.status != 200:
-                    return None
-
-                data = await response.json()
-                download_token = data.get("download_token")
-                
-                if not download_token:
-                    return None
-                
-                stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=audio&token={download_token}"
-                
-                async with session.get(
-                    stream_url,
-                    timeout=aiohttp.ClientTimeout(total=300)
-                ) as file_response:
-                    if file_response.status == 302:
-                        redirect_url = file_response.headers.get('Location')
-                        if redirect_url:
-                            async with session.get(redirect_url) as final_response:
-                                if final_response.status != 200:
-                                    return None
+                if response.status == 200:
+                    data = await response.json()
+                    download_token = data.get("download_token")
+                    
+                    if download_token:
+                        stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=audio&token={download_token}"
+                        
+                        async with session.get(
+                            stream_url,
+                            timeout=aiohttp.ClientTimeout(total=300)
+                        ) as file_response:
+                            if file_response.status == 302:
+                                redirect_url = file_response.headers.get('Location')
+                                if redirect_url:
+                                    async with session.get(redirect_url) as final_response:
+                                        if final_response.status == 200:
+                                            with open(file_path, "wb") as f:
+                                                async for chunk in final_response.content.iter_chunked(16384):
+                                                    f.write(chunk)
+                                            return file_path
+                            elif file_response.status == 200:
                                 with open(file_path, "wb") as f:
-                                    async for chunk in final_response.content.iter_chunked(16384):
+                                    async for chunk in file_response.content.iter_chunked(16384):
                                         f.write(chunk)
                                 return file_path
-                    elif file_response.status == 200:
-                        with open(file_path, "wb") as f:
-                            async for chunk in file_response.content.iter_chunked(16384):
-                                f.write(chunk)
-                        return file_path
-                    else:
-                        return None
-
     except Exception:
-        return None
+        pass
+
+    # 2. إذا فشل الـ API، نستخدم yt-dlp المحلي (Fallback)
+    return await download_song_ytdlp(link)
+
 
 async def download_video(link: str) -> str:
     global YOUR_API_URL
     
+    # 1. محاولة التحميل عبر الـ API
     if not YOUR_API_URL:
         await load_api_url()
         if not YOUR_API_URL:
@@ -123,10 +184,8 @@ async def download_video(link: str) -> str:
     video_id = link.split('v=')[-1].split('&')[0] if 'v=' in link else link
 
     if not video_id or len(video_id) < 3:
-        return None
+        return await download_video_ytdlp(link)
 
-    DOWNLOAD_DIR = "downloads"
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
 
     if os.path.exists(file_path):
@@ -141,41 +200,37 @@ async def download_video(link: str) -> str:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=60)
             ) as response:
-                if response.status != 200:
-                    return None
-
-                data = await response.json()
-                download_token = data.get("download_token")
-                
-                if not download_token:
-                    return None
-                
-                stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=video&token={download_token}"
-                
-                async with session.get(
-                    stream_url,
-                    timeout=aiohttp.ClientTimeout(total=600)
-                ) as file_response:
-                    if file_response.status == 302:
-                        redirect_url = file_response.headers.get('Location')
-                        if redirect_url:
-                            async with session.get(redirect_url) as final_response:
-                                if final_response.status != 200:
-                                    return None
+                if response.status == 200:
+                    data = await response.json()
+                    download_token = data.get("download_token")
+                    
+                    if download_token:
+                        stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=video&token={download_token}"
+                        
+                        async with session.get(
+                            stream_url,
+                            timeout=aiohttp.ClientTimeout(total=600)
+                        ) as file_response:
+                            if file_response.status == 302:
+                                redirect_url = file_response.headers.get('Location')
+                                if redirect_url:
+                                    async with session.get(redirect_url) as final_response:
+                                        if final_response.status == 200:
+                                            with open(file_path, "wb") as f:
+                                                async for chunk in final_response.content.iter_chunked(16384):
+                                                    f.write(chunk)
+                                            return file_path
+                            elif file_response.status == 200:
                                 with open(file_path, "wb") as f:
-                                    async for chunk in final_response.content.iter_chunked(16384):
+                                    async for chunk in file_response.content.iter_chunked(16384):
                                         f.write(chunk)
                                 return file_path
-                    elif file_response.status == 200:
-                        with open(file_path, "wb") as f:
-                            async for chunk in file_response.content.iter_chunked(16384):
-                                f.write(chunk)
-                        return file_path
-                    else:
-                        return None
-
     except Exception:
-        return None
+        pass
+
+    # 2. إذا فشل الـ API، نستخدم yt-dlp المحلي (Fallback)
+    return await download_video_ytdlp(link)
+
 
 # --- دوال المساعدة ---
 
@@ -234,7 +289,6 @@ class YouTubeAPI:
         for result in (await results.next())["result"]:
             title = result["title"]
             duration_min = result["duration"]
-            # إصلاح: إزالة split للحفاظ على جودة الصورة
             thumbnail = result["thumbnails"][0]["url"]
             vidid = result["id"]
             duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
@@ -265,7 +319,6 @@ class YouTubeAPI:
             link = link.split("&")[0]
         results = VideosSearch(link, limit=1)
         for result in (await results.next())["result"]:
-            # إصلاح: إزالة split
             return result["thumbnails"][0]["url"]
 
     async def video(self, link: str, videoid: Union[bool, str] = None):
@@ -273,14 +326,13 @@ class YouTubeAPI:
             link = self.base + link
         if "&" in link:
             link = link.split("&")[0]
-        try:
-            downloaded_file = await download_video(link)
-            if downloaded_file:
-                return 1, downloaded_file
-            else:
-                return 0, "Video download failed"
-        except Exception as e:
-            return 0, f"Video download error: {e}"
+        
+        # استخدام دالة التحميل الهجينة (API ثم Fallback)
+        downloaded_file = await download_video(link)
+        if downloaded_file:
+            return 1, downloaded_file
+        else:
+            return 0, "Video download failed"
 
     async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
         if videoid:
@@ -308,7 +360,6 @@ class YouTubeAPI:
             duration_min = result["duration"]
             vidid = result["id"]
             yturl = result["link"]
-            # إصلاح: إزالة split
             thumbnail = result["thumbnails"][0]["url"]
         track_details = {
             "title": title,
@@ -358,14 +409,12 @@ class YouTubeAPI:
         a = VideosSearch(link, limit=10)
         result = (await a.next()).get("result")
         
-        # التأكد من وجود نتائج
         if not result or query_type >= len(result):
             return None, None, None, None
             
         title = result[query_type]["title"]
         duration_min = result[query_type]["duration"]
         vidid = result[query_type]["id"]
-        # إصلاح: إزالة split
         thumbnail = result[query_type]["thumbnails"][0]["url"]
         return title, duration_min, thumbnail, vidid
 
@@ -383,15 +432,13 @@ class YouTubeAPI:
         if videoid:
             link = self.base + link
 
-        try:
-            if video:
-                downloaded_file = await download_video(link)
-            else:
-                downloaded_file = await download_song(link)
-            
-            if downloaded_file:
-                return downloaded_file, True
-            else:
-                return None, False
-        except Exception:
+        # استخدام دوال التحميل الهجينة
+        if video:
+            downloaded_file = await download_video(link)
+        else:
+            downloaded_file = await download_song(link)
+        
+        if downloaded_file:
+            return downloaded_file, True
+        else:
             return None, False
