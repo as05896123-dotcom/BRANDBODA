@@ -1,14 +1,21 @@
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def stats_buttons(_, status):
-    not_sudo = [
+def stats_buttons(_, is_sudo: bool):
+    """
+    Stats main buttons
+    - is_sudo = True  → show sudo stats buttons
+    - is_sudo = False → show normal user stats buttons
+    """
+
+    user_buttons = [
         InlineKeyboardButton(
             text=_["SA_B_1"],
             callback_data="TopOverall",
         )
     ]
-    sudo = [
+
+    sudo_buttons = [
         InlineKeyboardButton(
             text=_["SA_B_2"],
             callback_data="bot_stats_sudo",
@@ -18,9 +25,10 @@ def stats_buttons(_, status):
             callback_data="TopOverall",
         ),
     ]
-    upl = InlineKeyboardMarkup(
+
+    return InlineKeyboardMarkup(
         [
-            sudo if status else not_sudo,
+            sudo_buttons if is_sudo else user_buttons,
             [
                 InlineKeyboardButton(
                     text=_["CLOSE_BUTTON"],
@@ -29,11 +37,13 @@ def stats_buttons(_, status):
             ],
         ]
     )
-    return upl
 
 
 def back_stats_buttons(_):
-    upl = InlineKeyboardMarkup(
+    """
+    Back button for stats panels
+    """
+    return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
@@ -47,4 +57,3 @@ def back_stats_buttons(_):
             ],
         ]
     )
-    return upl
