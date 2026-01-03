@@ -9,7 +9,7 @@ from pyrogram.raw.functions.phone import CreateGroupCall
 from pyrogram.errors import ChatAdminRequired
 
 from pytgcalls import PyTgCalls
-from pytgcalls.exceptions import AlreadyJoinedError, NoActiveGroupCall
+from pytgcalls.exceptions import AlreadyInCallError, NoActiveGroupCall
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update
 from pytgcalls.types.stream import StreamAudioEnded
 
@@ -26,6 +26,7 @@ from BrandrdXMusic.core.database.settings import (
     is_autoend,
 )
 from BrandrdXMusic.core.database.queries import set_queries
+
 from BrandrdXMusic.utils.database import (
     add_active_chat,
     add_active_video_chat,
@@ -37,6 +38,7 @@ from BrandrdXMusic.utils.database import (
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.stream.autoclear import auto_clean
 from strings import get_string
+
 
 # =======================
 # Globals
@@ -133,10 +135,16 @@ class Call:
             pass
 
     # =======================
-    # Join Call (PyTgCalls V3)
+    # Join Call
     # =======================
 
-    async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: bool = False):
+    async def join_call(
+        self,
+        chat_id: int,
+        original_chat_id: int,
+        link: str,
+        video: bool = False,
+    ):
         assistant = await group_assistant(self, chat_id)
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -166,7 +174,7 @@ class Call:
             except (ChatAdminRequired, Exception):
                 raise AssistantErr(_["call_8"])
 
-        except AlreadyJoinedError:
+        except AlreadyInCallError:
             raise AssistantErr(_["call_9"])
 
         await add_active_chat(chat_id)
@@ -209,7 +217,6 @@ class Call:
         videoid = data["vidid"]
         streamtype = data["streamtype"]
 
-        # ===== YouTube Logic (SAFE – UNTOUCHED) =====
         if file.startswith(("vid_", "live_")):
             link = await YouTube.video(videoid, file.startswith("live_"))
         else:
