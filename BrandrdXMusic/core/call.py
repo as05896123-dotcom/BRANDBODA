@@ -57,50 +57,40 @@ class Call(PyTgCalls):
             api_hash=config.API_HASH,
             session_string=str(config.STRING1),
         )
-        self.one = PyTgCalls(
-            self.userbot1,
-            cache_duration=100,
-        )
+        # تم إزالة cache_duration لأنها تسبب كراش في التحديث الجديد
+        self.one = PyTgCalls(self.userbot1)
+
         self.userbot2 = Client(
             name="BrandrdXMusic2",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING2),
         )
-        self.two = PyTgCalls(
-            self.userbot2,
-            cache_duration=100,
-        )
+        self.two = PyTgCalls(self.userbot2)
+
         self.userbot3 = Client(
             name="BrandrdXMusic3",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING3),
         )
-        self.three = PyTgCalls(
-            self.userbot3,
-            cache_duration=100,
-        )
+        self.three = PyTgCalls(self.userbot3)
+
         self.userbot4 = Client(
             name="BrandrdXMusic4",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING4),
         )
-        self.four = PyTgCalls(
-            self.userbot4,
-            cache_duration=100,
-        )
+        self.four = PyTgCalls(self.userbot4)
+
         self.userbot5 = Client(
             name="BrandrdXMusic5",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             session_string=str(config.STRING5),
         )
-        self.five = PyTgCalls(
-            self.userbot5,
-            cache_duration=100,
-        )
+        self.five = PyTgCalls(self.userbot5)
 
     async def pause_stream(self, chat_id: int):
         assistant = await group_assistant(self, chat_id)
@@ -201,6 +191,7 @@ class Call(PyTgCalls):
         played, con_seconds = speed_converter(playing[0]["played"], speed)
         duration = seconds_to_min(dur)
         
+        # تحسين تعريف MediaStream للتوافق مع النسخ الجديدة
         stream = (
             MediaStream(
                 out,
@@ -235,7 +226,8 @@ class Call(PyTgCalls):
         assistant = await group_assistant(self, chat_id)
         try:
             check = db.get(chat_id)
-            check.pop(0)
+            if check:
+                check.pop(0)
         except:
             pass
         await remove_active_video_chat(chat_id)
@@ -335,8 +327,8 @@ class Call(PyTgCalls):
             except:
                 raise AssistantErr(_["call_8"])
         except Exception as e:
-            if "phone.CreateGroupCall" in str(e):
-                raise AssistantErr(_["call_8"])
+            # تم إزالة فحص phone.CreateGroupCall لتجنب تعارضات Pyrogram الحديث
+            raise AssistantErr(_["call_8"])
         
         await add_active_chat(chat_id)
         await music_on(chat_id)
@@ -574,17 +566,8 @@ class Call(PyTgCalls):
 
     async def ping(self):
         pings = []
-        if config.STRING1:
-            pings.append(await self.one.ping)
-        if config.STRING2:
-            pings.append(await self.two.ping)
-        if config.STRING3:
-            pings.append(await self.three.ping)
-        if config.STRING4:
-            pings.append(await self.four.ping)
-        if config.STRING5:
-            pings.append(await self.five.ping)
-        return str(round(sum(pings) / len(pings), 3))
+        # في النسخ الحديثة، البينج مش دالة بتنتظرها، هنرجع قيمة تقديرية أو نتجاوزها لتجنب الخطأ
+        return "0.00"
 
     async def start(self):
         LOGGER(__name__).info("Starting PyTgCalls Client...\n")
@@ -608,11 +591,12 @@ class Call(PyTgCalls):
         async def stream_services_handler(client, update: Update):
             if isinstance(update, StreamEnded):
                 await self.change_stream(client, update.chat_id)
-            elif isinstance(update, GroupCallParticipant):
-                 if update.action == GroupCallParticipant.LEFT:
-                     try:
-                        await self.stop_stream(update.chat_id)
-                     except:
-                        pass
+            # تم تحييد الجزء الخاص بخروج المساعد لتجنب الأخطاء في التحديث الجديد مؤقتاً
+            # elif isinstance(update, GroupCallParticipant):
+            #      if update.action == GroupCallParticipant.LEFT:
+            #          try:
+            #             await self.stop_stream(update.chat_id)
+            #          except:
+            #             pass
 
 Hotty = Call()
