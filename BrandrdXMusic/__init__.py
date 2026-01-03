@@ -8,15 +8,39 @@ from BrandrdXMusic.misc import dbb, heroku
 
 from SafoneAPI import SafoneAPI
 
-# الدوال دي بتشتغل دلوقتي واللوجر جاهز
+# ===============================
+# تهيئة المجلدات والبيئة
+# ===============================
+
+# إنشاء المجلدات المطلوبة
 dirr()
-git()
+
+# ❌ تعطيل التحديث التلقائي من Git
+# السبب: Fly / Docker لا يدعم git fetch بدون credentials
+# git()
+
+# تهيئة قواعد البيانات
 dbb()
+
+# تهيئة Heroku (لو موجود)
 heroku()
 
+# ===============================
+# تشغيل البوتات
+# ===============================
+
+# البوت الأساسي
 app = Hotty()
+
+# الحساب المساعد
 userbot = Userbot()
+
+# API خارجي
 api = SafoneAPI()
+
+# ===============================
+# منصات التشغيل
+# ===============================
 
 from .platforms import *
 
@@ -27,5 +51,9 @@ Spotify = SpotifyAPI()
 Resso = RessoAPI()
 Telegram = TeleAPI()
 YouTube = YouTubeAPI()
+
+# ===============================
+# اسم التطبيق
+# ===============================
 
 APP = "Systumm_music_bot"
