@@ -1,5 +1,5 @@
 aiofiles
-aiohttp==3.8.6
+aiohttp
 apscheduler
 dnspython
 gTTS
@@ -27,4 +27,4 @@ openai
 httpx
 tgcrypto
 pyrogram==2.0.0
-py-tgcalls>=2.0.0
+py-tgcalls
