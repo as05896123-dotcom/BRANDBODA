@@ -1,7 +1,6 @@
 import asyncio
 import importlib
 from pyrogram import idle
-from pytgcalls.exceptions import NoActiveGroupCall
 
 import config
 from BrandrdXMusic import LOGGER, app, userbot
@@ -23,32 +22,34 @@ async def init():
     ):
         LOGGER(__name__).error("لم يتم العثور على كود سيشن الحساب المساعد... جاري الخروج")
         exit(1)
-    
+
     # تهيئة المشرفين وقوائم الحظر
     await sudo()
     try:
         users = await get_gbanned()
         for user_id in users:
             BANNED_USERS.add(user_id)
+
         users = await get_banned_users()
         for user_id in users:
             BANNED_USERS.add(user_id)
-    except:
+    except Exception:
         pass
-    
+
     # تشغيل البوت الأساسي
     await app.start()
-    
+
     # استدعاء ملفات البلجنز
     for module_name in ALL_MODULES:
         importlib.import_module(f"BrandrdXMusic.plugins.{module_name}")
     LOGGER("BrandrdXMusic.plugins").info("تم استدعاء ملفات البوت بنجاح")
-    
-    # تشغيل الحساب المساعد وبدء المكالمات
+
+    # تشغيل الحساب المساعد و PyTgCalls
     await userbot.start()
     await Hotty.start()
-    
-    # رسالة تأكيد تشغيل البوت
+    await Hotty.decorators()
+
+    # رسالة تشغيل
     LOGGER("BrandrdXMusic").info(
         "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🤍 تم تشغيل البوت بنجاح\n"
@@ -58,11 +59,9 @@ async def init():
         "💕 شكرا لاستخدامك سورس بودا\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
-    
-    # إبقاء البوت يعمل حتى إشارة توقف (Ctrl+C)
+
     await idle()
-    
-    # إيقاف التشغيل عند الإغلاق
+
     await app.stop()
     await userbot.stop()
     LOGGER("BrandrdXMusic").info("تم ايقاف البوت بنجاح")
