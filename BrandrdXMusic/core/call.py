@@ -7,7 +7,7 @@ from pyrogram.raw.functions.phone import CreateGroupCall
 from pyrogram.errors import ChatAdminRequired
 
 from pytgcalls import PyTgCalls
-from pytgcalls.exceptions import AlreadyJoinedError, NoActiveGroupCall
+from pytgcalls.exceptions import AlreadyInCallError, NoActiveGroupCall
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update
 from pytgcalls.types.stream import StreamAudioEnded
 
@@ -15,7 +15,7 @@ import config
 from BrandrdXMusic import LOGGER, app, YouTube
 from BrandrdXMusic.misc import db
 
-# ===== Database =====
+# ===== Database (NEW STRUCTURE) =====
 from BrandrdXMusic.core.database.assistants import group_assistant
 from BrandrdXMusic.core.database.settings import (
     get_lang,
@@ -128,13 +128,12 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         try:
             await _clear_(chat_id)
-            # تحديث: استخدام leave_group_call بدلاً من leave
-            await assistant.leave_group_call(chat_id)
+            await assistant.leave_group_call(chat_id)  # استخدم leave_group_call للخروج من المكالمة1
         except Exception:
             pass
 
     # =======================
-    # Join Call (Updated for V3)
+    # Join Call
     # =======================
 
     async def join_call(
@@ -148,11 +147,11 @@ class Call:
         language = await get_lang(chat_id)
         _ = get_string(language)
 
-        # التحقق من الرابط
+        # تحقق من صحة الرابط أو الملف
         if not link.startswith("http") and not os.path.isfile(link):
             raise AssistantErr(_["call_7"])
 
-        # إعداد MediaStream (يدعم الصوت والفيديو)
+        # إعداد وسائط الصوت/الفيديو
         stream = MediaStream(
             link,
             audio_parameters=AudioQuality.HIGH,
@@ -161,22 +160,25 @@ class Call:
         )
 
         try:
-            # تحديث: استخدام join_group_call بدلاً من play
-            await assistant.join_group_call(chat_id, stream)
+            await assistant.play(chat_id, stream)
 
         except NoActiveGroupCall:
+            # إنشاء مكالمة جديدة باستخدام Pyrogram ثم تشغيل الوسائط
             try:
-                # محاولة إنشاء مكالمة إذا لم تكن موجودة
-                await self.create_call(chat_id)
-                await assistant.join_group_call(chat_id, stream)
+                await app.invoke(
+                    CreateGroupCall(
+                        peer=await app.resolve_peer(chat_id),
+                        random_id=app.rnd_id(),
+                    )
+                )
+                await assistant.play(chat_id, stream)
             except (ChatAdminRequired, Exception):
                 raise AssistantErr(_["call_8"])
 
-        except AlreadyJoinedError:
-            # تحديث: تم استبدال AlreadyInCallError بـ AlreadyJoinedError
+        except AlreadyInCallError:
             raise AssistantErr(_["call_9"])
 
-        # تحديث قواعد البيانات
+        # إضافة المحادثة النشطة للإحصائيات
         await add_active_chat(chat_id)
         await music_on(chat_id)
         await set_queries(1)
@@ -184,22 +186,12 @@ class Call:
         if video:
             await add_active_video_chat(chat_id)
 
+        # تفعيل المراقب للإيقاف التلقائي إذا كان مفعلاً
         if await is_autoend():
             asyncio.create_task(self.autoend_watcher(chat_id))
 
     # =======================
-    # Helper: Create Call
-    # =======================
-    async def create_call(self, chat_id):
-        await app.invoke(
-            CreateGroupCall(
-                peer=await app.resolve_peer(chat_id),
-                random_id=app.rnd_id(),
-            )
-        )
-
-    # =======================
-    # Change Stream
+    # Change Stream (Next in Queue)
     # =======================
 
     async def change_stream(self, client: PyTgCalls, chat_id: int):
@@ -278,7 +270,7 @@ class Call:
                 return
 
     # =======================
-    # Start & Decorators
+    # Start & Stream-End Decorators
     # =======================
 
     async def start(self):
@@ -290,6 +282,7 @@ class Call:
         await self.five.start()
 
     async def decorators(self):
+
         @self.one.on_stream_end()
         async def _(client, update: Update):
             if isinstance(update, StreamAudioEnded):
