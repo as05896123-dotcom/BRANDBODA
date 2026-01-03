@@ -5,11 +5,11 @@ dnspython
 gTTS
 hachoir
 heroku3
-motor==3.3.2
+motor
 pillow
 psutil
 pykeyboard
-pymongo==4.6.0
+pymongo
 python-dotenv
 pyyaml
 requests
@@ -26,5 +26,5 @@ MukeshAPI
 openai
 httpx
 tgcrypto
-pyrogram==2.0.106
-py-tgcalls==0.9.9
+pyrogram
+py-tgcalls>=2.0.0
