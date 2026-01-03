@@ -1,6 +1,6 @@
 app = "brandrdxmusic-x46dna"
 primary_region = "cdg"
-kill_timeout = 300
+kill_timeout = 600
 
 [experimental]
   auto_rollback = true
@@ -13,7 +13,7 @@ kill_timeout = 300
 
 [[vm]]
   cpu_kind = "shared"
-  cpus = 1
+  cpus = 2
   memory_mb = 1024
 
 [[swap]]
