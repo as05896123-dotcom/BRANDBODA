@@ -6,7 +6,9 @@ from pyrogram.types import Message
 from BrandrdXMusic import app
 from BrandrdXMusic.misc import SUDOERS
 from BrandrdXMusic.utils import get_readable_time
-from BrandrdXMusic.utils.database import (
+
+# [CORE MIGRATION] استيراد دوال قاعدة البيانات من المسار الجديد
+from BrandrdXMusic.core.database import (
     add_banned_user,
     get_banned_count,
     get_banned_users,
@@ -18,20 +20,29 @@ from BrandrdXMusic.utils.extraction import extract_user
 from config import BANNED_USERS
 
 
-# دالة الحظر العام (تأديب - تاديب)
-# تم إضافة "تاديب" و "تأديب" ليعمل بالحالتين
-@app.on_message(filters.command(["gban", "globalban", "تأديب", "تاديب"]) & SUDOERS)
+# ==========================================================
+# 1. الحظر العام / التأديب (GBAN)
+# ==========================================================
+# الأوامر: تأديب، تاديب، gban
+@app.on_message(filters.command(["gban", "globalban", "تأديب", "تاديب"], prefixes=["", "/", "!", "."]) & SUDOERS)
 async def global_ban(client, message: Message):
+    # التحقق من المدخلات (يجب وجود رد أو معرف)
     if not message.reply_to_message:
-        if len(message.command) != 2:
+        if len(message.text.split()) < 2:
             return await message.reply_text(
                 "🥀 **طـريـقـة الاسـتـخـدام :**\n\n"
-                "• gban [المعرف/الآيدي]\n"
-                "• تأديب [المعرف/الآيدي]"
+                "يـجـب الـرد عـلـى الـعـضـو أو وضـع الـمـعـرف بـجـانـب الأمـر.\n\n"
+                "**مـثـال:**\n"
+                "<code>تأديب @User</code>\n"
+                "**أو:**\n"
+                "<code>gban @User</code>"
             )
             
     user = await extract_user(message)
+    if not user:
+        return await message.reply_text("🥀 **عـذراً، لـم أسـتـطـع الـعـثـور عـلـى الـمـسـتـخـدم.**")
     
+    # حماية المطور والبوت والنفس
     if user.id == message.from_user.id:
         return await message.reply_text("🧚 **لا يـمـكـنـك تـأديب نـفـسـك.**")
     elif user.id == app.id:
@@ -46,6 +57,7 @@ async def global_ban(client, message: Message):
     if user.id not in BANNED_USERS:
         BANNED_USERS.add(user.id)
         
+    # جلب جميع المجموعات التي يعمل بها البوت
     served_chats = []
     chats = await get_served_chats()
     for chat in chats:
@@ -77,18 +89,27 @@ async def global_ban(client, message: Message):
     await mystic.delete()
 
 
-# دالة رفع الحظر العام (سامحه)
-@app.on_message(filters.command(["ungban", "سامحه"]) & SUDOERS)
+# ==========================================================
+# 2. رفع الحظر العام / المسامحة (UNGBAN)
+# ==========================================================
+# الأوامر: سامحه، ungban
+@app.on_message(filters.command(["ungban", "سامحه"], prefixes=["", "/", "!", "."]) & SUDOERS)
 async def global_un(client, message: Message):
     if not message.reply_to_message:
-        if len(message.command) != 2:
+        if len(message.text.split()) < 2:
             return await message.reply_text(
                 "🥀 **طـريـقـة الاسـتـخـدام :**\n\n"
-                "• ungban [المعرف/الآيدي]\n"
-                "• سامحه [المعرف/الآيدي]"
+                "يـجـب الـرد عـلـى الـعـضـو أو وضـع الـمـعـرف بـجـانـب الأمـر.\n\n"
+                "**مـثـال:**\n"
+                "<code>سامحه @User</code>\n"
+                "**أو:**\n"
+                "<code>ungban @User</code>"
             )
             
     user = await extract_user(message)
+    if not user:
+        return await message.reply_text("🥀 **عـذراً، لـم أسـتـطـع الـعـثـور عـلـى الـمـسـتـخـدم.**")
+
     is_gbanned = await is_banned_user(user.id)
     if not is_gbanned:
         return await message.reply_text(f"🧚 **الـعـضـو {user.mention} لـيـس خـاضـعـاً لـلـتـأديب.**")
@@ -126,9 +147,17 @@ async def global_un(client, message: Message):
     await mystic.delete()
 
 
-# دالة عرض قائمة المؤدبين
-@app.on_message(filters.command(["gbannedusers", "gbanlist", "المؤدبين", "قائمة_التأديب"]) & SUDOERS)
+# ==========================================================
+# 3. عرض قائمة المؤدبين
+# ==========================================================
+# الأوامر: قائمة التأديب، المؤدبين، gbanlist
+@app.on_message(filters.command(["gbannedusers", "gbanlist", "المؤدبين", "قائمة"], prefixes=["", "/", "!", "."]) & SUDOERS)
 async def gbanned_list(client, message: Message):
+    # إذا كتب المستخدم "قائمة" فقط، نتأكد أنها "قائمة التأديب"
+    # إذا كتب "المؤدبين" أو "gbanlist" سيعمل مباشرة
+    if "قائمة" in message.text and "التأديب" not in message.text:
+        return 
+
     counts = await get_banned_count()
     if counts == 0:
         return await message.reply_text("💕 **لا يـوجـد مـسـتـخـدمـيـن تـم تـأديـبـهـم حـالـيـاً.**")
@@ -141,8 +170,8 @@ async def gbanned_list(client, message: Message):
         count += 1
         try:
             user = await app.get_users(user_id)
-            user = user.first_name if not user.mention else user.mention
-            msg += f"**{count}➤** {user}\n"
+            user_mention = user.first_name if not user.mention else user.mention
+            msg += f"**{count}➤** {user_mention}\n"
         except Exception:
             msg += f"**{count}➤** `{user_id}`\n"
             continue
