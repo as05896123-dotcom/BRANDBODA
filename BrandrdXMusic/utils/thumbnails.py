@@ -158,3 +158,8 @@ async def get_thumb(videoid):
     except Exception as e:
         print(e)
         return YOUTUBE_IMG_URL
+
+# --- هذا هو الجزء المهم لحل مشكلة Import Error ---
+# Stream.py بينادي على gen_thumb، فإحنا هنعمل تحويل بسيط
+async def gen_thumb(videoid, user_id=None, theme=None):
+    return await get_thumb(videoid)
