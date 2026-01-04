@@ -1,16 +1,12 @@
-from pyrogram import Client, errors
-from pyrogram.enums import ChatMemberStatus, ParseMode
-from pyrogram.errors import FloodWait
-import asyncio
-
+from pyrogram import Client
+from pyrogram.enums import ParseMode
 import config
-from BrandrdXMusic.logging import LOGGER
+from ..logging import LOGGER
 
 
 class Hotty(Client):
     def __init__(self):
-        LOGGER(__name__).info("🚀 جاري بدء تشغيل البوت...")
-
+        LOGGER(__name__).info(f"جاري بدء تشغيل البوت...")
         super().__init__(
             name="BrandrdXMusic",
             api_id=config.API_ID,
@@ -18,65 +14,29 @@ class Hotty(Client):
             bot_token=config.BOT_TOKEN,
             in_memory=True,
             parse_mode=ParseMode.HTML,
-            max_concurrent_transmissions=7,
         )
 
     async def start(self):
         await super().start()
+        self.id = self.me.id
+        self.name = self.me.first_name + " " + (self.me.last_name or "")
+        self.username = self.me.username
+        self.mention = self.me.mention
 
-        # ===== جلب بيانات البوت بشكل آمن =====
-        me = await self.get_me()
-        self.id = me.id
-        self.first_name = me.first_name or ""
-        self.last_name = me.last_name or ""
-        self.name = f"{self.first_name} {self.last_name}".strip()
-        self.username = me.username
-        self.mention = me.mention if me.mention else self.name
+        # --- محاولة إرسال رسالة السجل (بدون إيقاف البوت) ---
+        try:
+            await self.send_message(
+                chat_id=config.LOGGER_ID,
+                text=f"<u><b>» {self.mention} بـدأ الـعـمـل :</b></u>\n\nالآيـدي : <code>{self.id}</code>\nالاسـم : {self.name}\nالـمـعـرف : @{self.username}",
+            )
+        except Exception:
+            # لو حصل أي خطأ (البوت مش أدمن، القناة مش موجودة.. إلخ)
+            # هيتجاهل الأمر ويكمل تشغيل البوت عادي جداً
+            pass
+        
+        # تم إزالة التحقق من صلاحيات الأدمن (get_chat_member) عشان ميضربش
 
-        # ===== إرسال رسالة اللوج (غير قاتلة) =====
-        if config.LOGGER_ID:
-            try:
-                await self.send_message(
-                    chat_id=config.LOGGER_ID,
-                    text=(
-                        "<u><b>» تم تشغيل بوت الميوزك بنجاح</b></u>\n\n"
-                        f"🆔 الايدي: <code>{self.id}</code>\n"
-                        f"🤖 الاسم: {self.name}\n"
-                        f"🔗 اليوزر: @{self.username}"
-                    ),
-                )
-
-            except FloodWait as e:
-                LOGGER(__name__).warning(
-                    f"FloodWait أثناء إرسال رسالة اللوج، انتظار {e.value} ثانية"
-                )
-                await asyncio.sleep(e.value)
-
-            except (errors.ChannelInvalid, errors.PeerIdInvalid):
-                LOGGER(__name__).error(
-                    "❌ البوت فشل في الوصول لجروب/قناة اللوج، "
-                    "تأكد إن البوت مضاف."
-                )
-
-            except Exception as ex:
-                LOGGER(__name__).error(
-                    f"❌ فشل إرسال رسالة اللوج. السبب: {type(ex).__name__}"
-                )
-
-            # ===== التحقق من صلاحيات الأدمن (تحذير فقط) =====
-            try:
-                member = await self.get_chat_member(config.LOGGER_ID, self.id)
-                if member.status != ChatMemberStatus.ADMINISTRATOR:
-                    LOGGER(__name__).warning(
-                        "⚠️ البوت ليس مشرفًا في جروب اللوج."
-                    )
-            except Exception:
-                LOGGER(__name__).warning(
-                    "⚠️ تعذر التحقق من صلاحيات البوت داخل جروب اللوج."
-                )
-
-        LOGGER(__name__).info(f"✅ تم تشغيل بوت الميوزك باسم {self.name}")
+        LOGGER(__name__).info(f"تم بدء تشغيل بوت الميوزك باسم {self.name}")
 
     async def stop(self):
-        LOGGER(__name__).info("🛑 جاري إيقاف البوت...")
         await super().stop()
