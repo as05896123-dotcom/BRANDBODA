@@ -23,7 +23,7 @@ from pytgcalls.types import (
 import config
 from BrandrdXMusic import LOGGER, YouTube, app
 from BrandrdXMusic.misc import db
-from BrandrdXMusic.utils.database import (
+from BrandrdXMusic.core.database import (
     add_active_chat,
     add_active_video_chat,
     get_lang,
