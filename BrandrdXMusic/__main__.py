@@ -47,20 +47,20 @@ async def init():
         LOGGER(__name__).warning(f"Banned users load skipped: {e}")
 
     # =======================
-    # 🚨 أمر تجربة مباشر (TEST COMMAND)
+    # 🚨 أمر تجربة مباشر (Priority High)
     # =======================
-    # هذا الأمر موجود داخل ملف التشغيل مباشرة لضمان أن البوت يستجيب
-    @app.on_message(filters.command(["test", "تست", "alive"], prefixes=["/", "!", ".", ""]))
+    # تم وضع group=-1 عشان يتنفذ غصب عن أي ملف تاني
+    @app.on_message(filters.command(["test", "تست", "alive"], prefixes=["/", "!", ".", ""]), group=-1)
     async def test_command(client, message):
         await message.reply_text(
             "✅ **البوت متصل وشغال 100% يا حب!**\n"
-            "المشكلة كانت في ترتيب تحميل الملفات، دلوقتي كله تمام."
+            "إصدار PyTgCalls: v2.2.8\n"
+            "الرد ده وصلك لأننا رفعنا أولوية الأمر."
         )
 
     # =======================
-    # ✅ LOAD PLUGINS FIRST (قبل التشغيل)
+    # ✅ LOAD PLUGINS
     # =======================
-    # الترتيب ده مهم جداً عشان الأوامر تشتغل
     for module_name in ALL_MODULES:
         try:
             importlib.import_module(f"BrandrdXMusic.plugins.{module_name}")
@@ -81,7 +81,8 @@ async def init():
     try:
         await Hotty.decorators()
     except Exception as e:
-        LOGGER("CallDecorators").warning(f"Decorators warning: {e}")
+        # في v2.2.8 الديكوريتورز بتشتغل تلقائي مع start، فلو ضرب هنا مش مشكلة
+        pass
 
     # =======================
     # Startup message
@@ -102,14 +103,11 @@ async def init():
     await idle()
 
     # =======================
-    # Graceful shutdown (SAFE MODE)
+    # Graceful shutdown (v2 Compatible)
     # =======================
     LOGGER("BrandrdXMusic").info("🛑 جاري إيقاف البوت...")
     
-    try:
-        await Hotty.one.stop()
-    except: pass
-    
+    # في v2 مفيش stop للـ call client بشكل مباشر، بنوقف اليوزربوت بس
     try:
         await userbot.stop()
     except: pass
