@@ -8,15 +8,15 @@ from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
 # ==========================================
-# 🛑 الإحداثيات المعدلة (نزلت 7 بيكسل)
+# 🛑 الإحداثيات (زي ما هي بالمللي)
 # ==========================================
-# القديم كان 146، زودنا 7 بقى 153
 CIRCLE_POS = (160, 153)   
 CIRCLE_SIZE = (385, 355)  
 
 NAME_POS = (715, 190)
 BY_POS = (650, 255)
 VIEWS_POS = (711, 310)
+
 TIME_START = (580, 368)
 TIME_END = (1055, 368)
 # ==========================================
@@ -45,7 +45,9 @@ def format_views(views):
         v = str(views).lower().replace("views","").strip()
         if "m" in v or "k" in v: return v.upper()
         val = int(re.sub(r'\D', '', v))
-        return f"{val/1_000_000:.1f}M" if val >= 1e6 else (f"{val/1_000:.1f}K" if val >= 1e3 else str(val))
+        if val >= 1_000_000: return f"{val/1_000_000:.1f}M"
+        elif val >= 1_000: return f"{val/1_000:.1f}K"
+        else: return str(val)
     except: return str(views)
 
 def draw_shadowed_text(draw, pos, text, font, color="white"):
@@ -54,7 +56,28 @@ def draw_shadowed_text(draw, pos, text, font, color="white"):
     draw.text((x, y), text, font=font, fill=color)
 
 # ============================================================
-# 🎨 الرسام الذكي (مع تقنية Screen Blending)
+# 🌟 دالة النيون الجديدة (عشان الوقت يبان جوا القزاز)
+# ============================================================
+def draw_neon_text(base_img, pos, text, font, glow_color="#00d4ff"):
+    # 1. بنعمل طبقة شفافة للضوء
+    glow_layer = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+    draw_glow = ImageDraw.Draw(glow_layer)
+    
+    # 2. بنرسم النص بلون النيون (أزرق سماوي)
+    draw_glow.text(pos, text, font=font, fill=glow_color)
+    
+    # 3. بنعمله Blur قوي عشان يبقى زي الضوء المتوهج
+    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=5))
+    
+    # 4. بندمجه مع الصورة الأصلية
+    base_img.alpha_composite(glow_layer)
+    
+    # 5. بنرسم النص الأبيض فوق الضوء بس شفاف سنة (230) عشان يبان مندمج
+    draw_final = ImageDraw.Draw(base_img)
+    draw_final.text(pos, text, font=font, fill=(255, 255, 255, 230))
+
+# ============================================================
+# 🎨 الرسام الذكي
 # ============================================================
 async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, videoid):
     try:
@@ -62,65 +85,58 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         userid = str(userid or "Unknown Artist")
         views = str(views or "0")
 
-        # 1. فتح الصورة الأصلية
+        # 1. الخلفية
         try: source = Image.open(thumbnail_path).convert("RGBA")
         except: source = Image.new('RGBA', (1280, 720), (30, 30, 30))
 
-        # 2. الخلفية (Background) -> Blur = 3
-        # بنغمق الصورة سنة بسيطة عشان الكلام يوضح فوقها
         background = source.resize((1280, 720), resample=LANCZOS)
         background = background.filter(ImageFilter.GaussianBlur(3))
-        
-        # إضافة طبقة تعتيم خفيفة جداً (اختياري لتحسين قراءة النص)
-        darkener = Image.new('RGBA', (1280, 720), (0, 0, 0, 50))
+        darkener = Image.new('RGBA', (1280, 720), (0, 0, 0, 60))
         background = Image.alpha_composite(background, darkener)
 
-        # 3. دمج القالب (Overlay) بتقنية Screen
-        # الحل السحري عشان الخلفية تظهر ورا القالب الأسود
+        # 2. القالب (Overlay)
         if os.path.isfile("BrandrdXMusic/assets/overlay.png"):
             try:
                 overlay = Image.open("BrandrdXMusic/assets/overlay.png").convert("RGBA")
                 overlay = overlay.resize((1280, 720), resample=LANCZOS)
-                
-                # تحويل الصور لـ RGB عشان الدمج يشتغل صح
                 bg_rgb = background.convert("RGB")
                 ov_rgb = overlay.convert("RGB")
-                
-                # Screen Blend: بيخلي الأسود شفاف ويحافظ على النيون
                 merged = ImageChops.screen(bg_rgb, ov_rgb)
                 background = merged.convert("RGBA")
-            except Exception as e:
-                # لو فشل الدمج، استخدم اللصق العادي
-                print(f"Overlay Error: {e}")
+            except:
                 background.paste(overlay, (0, 0), overlay)
 
-        # 4. الدائرة الذكية (Smart Circle Fill)
+        # 3. الدائرة
         try:
             big_w, big_h = CIRCLE_SIZE[0] * 3, CIRCLE_SIZE[1] * 3
             smart_circle = ImageOps.fit(source, (big_w, big_h), centering=(0.5, 0.5), method=LANCZOS)
-            
             mask = Image.new('L', (big_w, big_h), 0)
             ImageDraw.Draw(mask).ellipse((0, 0, big_w, big_h), fill=255)
-            
             smart_circle = smart_circle.resize(CIRCLE_SIZE, resample=LANCZOS)
             mask = mask.resize(CIRCLE_SIZE, resample=LANCZOS)
-            
-            # اللصق في الإحداثيات الجديدة (153)
             background.paste(smart_circle, CIRCLE_POS, mask)
-        except Exception as e:
-            print(f"Circle Error: {e}")
+        except Exception as e: print(f"Circle Error: {e}")
 
-        # 5. الكتابة
+        # 4. الكتابة
         draw = ImageDraw.Draw(background)
         f_45 = get_font(45)
         f_30 = get_font(30)
         f_26 = get_font(26)
 
-        draw_shadowed_text(draw, NAME_POS, smart_truncate(draw, title, f_45, 500), f_45, "white")
-        draw_shadowed_text(draw, BY_POS, smart_truncate(draw, userid, f_30, 450), f_30, "#dddddd")
-        draw_shadowed_text(draw, VIEWS_POS, format_views(views), f_30, "#cccccc")
-        draw_shadowed_text(draw, TIME_START, "00:00", f_26, "white")
-        draw_shadowed_text(draw, TIME_END, duration, f_26, "white")
+        # الاسم والفيوز (زي ما طلبت بالكتابة الكاملة)
+        trunc_title = smart_truncate(draw, title, f_45, 500)
+        draw_shadowed_text(draw, NAME_POS, f"Name: {trunc_title}", f_45, "white")
+        
+        trunc_by = smart_truncate(draw, userid, f_30, 450)
+        draw_shadowed_text(draw, BY_POS, f"By: {trunc_by}", f_30, "#dddddd")
+        
+        fmt_views = format_views(views)
+        draw_shadowed_text(draw, VIEWS_POS, f"Views: {fmt_views}", f_30, "#00d4ff")
+
+        # 🛑 هنا التغيير: رسم الوقت بتأثير النيون (Integrated Look)
+        # استخدمنا background مباشرة مش draw
+        draw_neon_text(background, TIME_START, "00:00", f_26)
+        draw_neon_text(background, TIME_END, duration, f_26)
 
         output = f"cache/{videoid}_final.png"
         background.save(output)
@@ -143,17 +159,14 @@ async def gen_thumb(videoid, user_id=None):
     try:
         search = VideosSearch(url, limit=1)
         res = (await search.next())["result"][0]
-        
-        title = res.get("title", "Unknown")
-        title = re.sub(r"\W+", " ", title).title()
+        title = res.get("title", "Unknown").title()
         duration = res.get("duration", "00:00")
         views = res.get("viewCount", {}).get("short", "0")
         channel = res.get("channel", {}).get("name", "Unknown Artist")
         
         candidates = [
             f"https://img.youtube.com/vi/{videoid}/maxresdefault.jpg",
-            f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg",
-            f"https://img.youtube.com/vi/{videoid}/sddefault.jpg"
+            f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg"
         ]
         if res.get("thumbnails"): candidates.append(res["thumbnails"][-1]["url"])
 
