@@ -8,28 +8,25 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageChops
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
-# 🟢 استيراد مكتبات العربي
+# 🟢 استيراد مكتبات العربي بأمان تام
 try:
     import arabic_reshaper
     from bidi.algorithm import get_display
 except ImportError:
-    print("⚠️ Libraries missing!")
-    def get_display(text): return text
+    def get_display(text): return str(text)
     class arabic_reshaper:
-        def reshape(text): return text
-        class ArabicReshaper:
-            def __init__(self, configuration): pass
-            def reshape(self, text): return text
+        @staticmethod
+        def reshape(text): return str(text)
 
 # ==================================================================
 # ⚙️ الإحداثيات والإعدادات
 # ==================================================================
 
-# إحداثيات الدائرة (تم النزول 2 بكسل)
+# إحداثيات الدائرة (معدلة)
 BOX_LEFT = 115
-BOX_TOP = 122      # كان 120
+BOX_TOP = 122
 BOX_RIGHT = 453
-BOX_BOTTOM = 394   # كان 392 (عشان نحافظ على مقاس الدائرة)
+BOX_BOTTOM = 394
 
 ART_POS = (BOX_LEFT, BOX_TOP)
 ART_WIDTH = BOX_RIGHT - BOX_LEFT   
@@ -54,18 +51,30 @@ COLOR_NAME = "white"
 COLOR_GLOW = "#00d4ff"
 
 # ==================================================================
-# 🛠️ دالة سحرية لتحميل الخط أوتوماتيك
+# 🛠️ الدوال المساعدة
 # ==================================================================
 
-async def check_and_download_font():
+if hasattr(Image, "Resampling"):
+    LANCZOS = Image.Resampling.LANCZOS
+else:
+    LANCZOS = Image.LANCZOS
+
+# متغير عام لتخزين مسار الخط
+CACHED_FONT_PATH = None
+
+async def download_font_if_needed():
+    global CACHED_FONT_PATH
     font_path = "cache/cairo_bold.ttf"
+    
     if os.path.exists(font_path):
-        return font_path
+        CACHED_FONT_PATH = font_path
+        return
 
     url = "https://github.com/google/fonts/raw/main/ofl/cairo/Cairo-Bold.ttf"
-    if not os.path.exists("cache"): os.makedirs("cache")
+    if not os.path.exists("cache"): 
+        try: os.makedirs("cache")
+        except: pass
     
-    print(f"⏳ Downloading Font from {url}...")
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -73,22 +82,31 @@ async def check_and_download_font():
                     f = await aiofiles.open(font_path, mode='wb')
                     await f.write(await resp.read())
                     await f.close()
-                    print("✅ Font Downloaded Successfully!")
-                    return font_path
-    except Exception as e:
-        print(f"❌ Failed to download font: {e}")
-    
-    return None
+                    CACHED_FONT_PATH = font_path
+                    print("✅ Font Downloaded")
+    except:
+        pass
 
-if hasattr(Image, "Resampling"):
-    LANCZOS = Image.Resampling.LANCZOS
-else:
-    LANCZOS = Image.LANCZOS
-
-def get_font(size, font_path=None):
+def get_font(size):
+    global CACHED_FONT_PATH
     try:
-        if font_path and os.path.exists(font_path):
-            return ImageFont.truetype(font_path, size)
+        # لو الخط اللي نزلناه موجود، استخدمه
+        if CACHED_FONT_PATH and os.path.exists(CACHED_FONT_PATH):
+            return ImageFont.truetype(CACHED_FONT_PATH, size)
+            
+        # لو مش موجود، جرب خطوط النظام
+        priority_fonts = [
+            "cache/cairo_bold.ttf",
+            "BrandrdXMusic/assets/font.ttf",
+            "assets/font.ttf",
+            "font.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        ]
+        for path in priority_fonts:
+            if os.path.isfile(path):
+                try:
+                    return ImageFont.truetype(path, size)
+                except: continue
         return ImageFont.load_default()
     except:
         return ImageFont.load_default()
@@ -96,14 +114,8 @@ def get_font(size, font_path=None):
 def fix_text(text):
     text = str(text)
     try:
-        reshaper = arabic_reshaper.ArabicReshaper(
-            configuration={
-                'delete_harakat': False,
-                'support_ligatures': True,
-                'support_zwj': True,
-            }
-        )
-        reshaped_text = reshaper.reshape(text)
+        # استخدام الطريقة الأبسط للتشكيل لتجنب الأخطاء
+        reshaped_text = arabic_reshaper.reshape(text) 
         bidi_text = get_display(reshaped_text)
         return bidi_text
     except:
@@ -142,14 +154,14 @@ def format_views(views):
         if val >= 1_000_000: return f"{val/1_000_000:.1f}M"
         elif val >= 1_000: return f"{val/1_000:.1f}K"
         else: return str(val)
-    except:
-        return str(views)
+    except: return str(views)
 
 def draw_shadowed_text(draw, pos, text, font, color="white", shadow_color="black"):
     try:
         x, y = pos
-        draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
-        draw.text((x, y), text, font=font, fill=color)
+        # التأكد إن الإحداثيات أرقام صحيحة
+        draw.text((int(x) + 2, int(y) + 2), text, font=font, fill=shadow_color)
+        draw.text((int(x), int(y)), text, font=font, fill=color)
     except: pass
 
 def draw_neon_text(base_img, pos, text, font):
@@ -165,11 +177,12 @@ def draw_neon_text(base_img, pos, text, font):
     except: pass
 
 # ==================================================================
-# 🎨 دالة الرسم
+# 🎨 دالة الرسم (رجعت للشكل الأصلي)
 # ==================================================================
 
-async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, videoid, font_path):
+async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, videoid):
     try:
+        # تحميل الخلفية
         if os.path.exists(thumbnail_path):
             try:
                 source = Image.open(thumbnail_path).convert("RGBA")
@@ -186,6 +199,7 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         except:
             background = Image.new('RGBA', (1280, 720), (0, 0, 0))
 
+        # رسم الدائرة
         try:
             art_cropped = ImageOps.fit(source, ART_SIZE, centering=(0.5, 0.5), method=LANCZOS)
             mask = Image.new('L', ART_SIZE, 0)
@@ -194,11 +208,11 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
             background.paste(art_cropped, ART_POS, mask)
         except: pass
 
+        # القالب
         try:
             overlay_path = "BrandrdXMusic/assets/overlay.png"
             if not os.path.isfile(overlay_path):
                 overlay_path = "assets/overlay.png"
-
             if os.path.isfile(overlay_path):
                 overlay = Image.open(overlay_path).convert("RGBA")
                 overlay = overlay.resize((1280, 720), resample=LANCZOS)
@@ -208,11 +222,13 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
                 background = merged.convert("RGBA")
         except: pass
 
+        # الكتابة
         try:
             draw = ImageDraw.Draw(background)
-            f_50 = get_font(50, font_path)
-            f_35 = get_font(35, font_path)
-            f_30 = get_font(30, font_path)
+            # دالة get_font هتجيب الخط اللي نزلناه أو أي خط شغال
+            f_50 = get_font(50)
+            f_35 = get_font(35)
+            f_30 = get_font(30)
 
             safe_title = smart_truncate(draw, str(title), f_50, 600)
             draw_shadowed_text(draw, POS_NAME, f"Name: {safe_title}", f_50, COLOR_NAME)
@@ -225,7 +241,8 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
 
             draw_neon_text(background, POS_TIME_START, "00:00", f_30)
             draw_neon_text(background, POS_TIME_END, str(duration), f_30)
-        except: pass
+        except Exception as e:
+            print(f"Draw Text Error: {e}")
 
         if not os.path.exists("cache"):
             try: os.makedirs("cache")
@@ -235,7 +252,8 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         background.save(final_path, format="PNG")
         return final_path
 
-    except:
+    except Exception as e:
+        print(f"Draw Thumb Error: {e}")
         return thumbnail_path if os.path.exists(thumbnail_path) else YOUTUBE_IMG_URL
 
 # ==================================================================
@@ -250,7 +268,8 @@ async def gen_thumb(videoid, user_id=None):
     final_path = f"cache/{videoid}_final.png"
     if os.path.isfile(final_path): return final_path
 
-    font_path = await check_and_download_font()
+    # بنحاول ننزل الخط في الخلفية قبل ما نبدأ
+    await download_font_if_needed()
 
     temp_path = f"cache/temp_{videoid}.png"
     url = f"https://www.youtube.com/watch?v={videoid}"
@@ -289,7 +308,7 @@ async def gen_thumb(videoid, user_id=None):
         
         if not downloaded: return YOUTUBE_IMG_URL
 
-        final = await draw_thumb(temp_path, title, channel, None, duration, views, videoid, font_path)
+        final = await draw_thumb(temp_path, title, channel, None, duration, views, videoid)
         
         if os.path.exists(temp_path):
             try: os.remove(temp_path)
@@ -297,8 +316,8 @@ async def gen_thumb(videoid, user_id=None):
             
         return final
 
-    except:
-        traceback.print_exc()
+    except Exception as e:
+        print(f"Gen Thumb Error: {e}")
         return YOUTUBE_IMG_URL
 
 get_thumb = gen_thumb
