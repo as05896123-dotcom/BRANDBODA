@@ -7,45 +7,21 @@ import asyncio
 from pyrogram import client, filters
 from pyrogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
 from pytgcalls.exceptions import NoActiveGroupCall
-from BrandrdXMusic.utils.database import get_assistant
 import config
-from BrandrdXMusic import Apple, Resso, SoundCloud, Spotify, Telegram, YouTube, app
+from BrandrdXMusic import Carbon, YouTube, app, Apple, Resso, SoundCloud, Spotify, Telegram
 from BrandrdXMusic.core.call import Hotty
-from BrandrdXMusic.misc import SUDOERS
-from BrandrdXMusic.utils import seconds_to_min, time_to_seconds
-from BrandrdXMusic.utils.channelplay import get_channeplayCB
-from BrandrdXMusic.utils.decorators.language import languageCB
-from BrandrdXMusic.utils.decorators.play import PlayWrapper
-from BrandrdXMusic.utils.formatters import formats
+from BrandrdXMusic.misc import db, SUDOERS
 from BrandrdXMusic.utils.database import (
+    add_active_video_chat,
+    is_active_chat,
     add_served_chat,
     add_served_user,
     blacklisted_chats,
     get_lang,
     is_banned_user,
     is_on_off,
+    get_assistant
 )
-from BrandrdXMusic.utils.logger import play_logs
-from config import BANNED_USERS, lyrical
-from time import time
-from BrandrdXMusic.utils.extraction import extract_user
-
-# --- استدعاء دالة التصميم الجديدة ---
-from BrandrdXMusic.utils.thumbnails import gen_thumb
-
-# Define a dictionary to track the last message timestamp for each user
-user_last_message_time = {}
-user_command_count = {}
-# Define the threshold for command spamming
-SPAM_THRESHOLD = 2
-SPAM_WINDOW_SECONDS = 5
-
-from pyrogram.types import InlineKeyboardMarkup
-import config
-from BrandrdXMusic import Carbon, YouTube, app
-from BrandrdXMusic.core.call import Hotty
-from BrandrdXMusic.misc import db
-from BrandrdXMusic.utils.database import add_active_video_chat, is_active_chat
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.inline import (
     aq_markup,
@@ -55,7 +31,17 @@ from BrandrdXMusic.utils.inline import (
 from BrandrdXMusic.utils.pastebin import HottyBin
 from BrandrdXMusic.utils.stream.queue import put_queue, put_queue_index
 from youtubesearchpython.__future__ import VideosSearch
+from BrandrdXMusic.utils import seconds_to_min, time_to_seconds
+from BrandrdXMusic.utils.channelplay import get_channeplayCB
+from BrandrdXMusic.utils.decorators.language import languageCB
+from BrandrdXMusic.utils.decorators.play import PlayWrapper
+from BrandrdXMusic.utils.formatters import formats
+from BrandrdXMusic.utils.logger import play_logs
+from BrandrdXMusic.utils.extraction import extract_user
+from config import BANNED_USERS, lyrical
 
+# --- استدعاء دالة التصميم الجديدة (بدون مشاكل) ---
+from BrandrdXMusic.utils.thumbnails import gen_thumb
 
 async def stream(
     _,
@@ -142,8 +128,8 @@ async def stream(
                     forceplay=forceplay,
                 )
                 
-                # [تعديل] استخدام التصميم الجديد
-                img = await gen_thumb(vidid, user_id, theme="default")
+                # [تصحيح] إزالة theme لأنه غير موجود في الدالة الأصلية
+                img = await gen_thumb(vidid, user_id)
                 
                 button = stream_markup(_, vidid, chat_id)
                 run = await app.send_photo(
@@ -163,7 +149,7 @@ async def stream(
         if count == 0:
             return
         else:
-            link = await brandedBin(msg)
+            link = await HottyBin(msg)
             lines = msg.count("\n")
             if lines >= 17:
                 car = os.linesep.join(msg.split(os.linesep)[:17])
@@ -205,8 +191,8 @@ async def stream(
                 "video" if video else "audio",
             )
             
-            # [تعديل] استخدام التصميم الجديد في الانتظار
-            img = await gen_thumb(vidid, user_id, theme="default")
+            # [تصحيح] إزالة theme
+            img = await gen_thumb(vidid, user_id)
             
             position = len(db.get(chat_id)) - 1
             button = aq_markup(_, chat_id)
@@ -241,8 +227,8 @@ async def stream(
                 forceplay=forceplay,
             )
             
-            # [تعديل] استخدام التصميم الجديد في التشغيل
-            img = await gen_thumb(vidid, user_id, theme="default")
+            # [تصحيح] إزالة theme
+            img = await gen_thumb(vidid, user_id)
             
             button = stream_markup(_, vidid, chat_id)
             run = await app.send_photo(
@@ -419,8 +405,8 @@ async def stream(
                 forceplay=forceplay,
             )
             
-            # [تعديل] استخدام التصميم الجديد
-            img = await gen_thumb(vidid, user_id, theme="default")
+            # [تصحيح] إزالة theme
+            img = await gen_thumb(vidid, user_id)
             
             button = stream_markup(_, chat_id)
             run = await app.send_photo(
@@ -489,11 +475,3 @@ async def stream(
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await mystic.delete()
-
-
-# دالة احتياطية لو حصل مشكلة (Fallback)
-async def get_thumb(videoid):
-    try:
-        return config.YOUTUBE_IMG_URL
-    except:
-        return config.START_IMG_URL
