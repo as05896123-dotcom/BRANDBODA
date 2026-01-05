@@ -7,7 +7,7 @@ from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
 # ==========================================
-# 🛑 إعدادات التصميم
+# 🛑 إعدادات التصميم والذكاء
 # ==========================================
 OVAL_X, OVAL_Y = 160, 146
 OVAL_W, OVAL_H = 385, 355
@@ -22,7 +22,7 @@ else:
     LANCZOS = Image.LANCZOS
 
 # ==========================================
-# 🛠️ دوال مساعدة
+# 🛠️ دوال مساعدة (Helpers)
 # ==========================================
 def get_font(size):
     possible_fonts = [
@@ -68,62 +68,61 @@ def fit_text(draw, text, initial_size, max_width):
 
 def draw_shadow_text(draw, pos, text, font, fill="white"):
     x, y = pos
-    draw.text((x + 2, y + 2), text, font=font, fill="black")
-    draw.text((x, y), text, font=font, fill=fill)
+    draw.text((x + 2, y + 2), str(text), font=font, fill="black")
+    draw.text((x, y), str(text), font=font, fill=fill)
 
 # ==========================================
-# 🎨 1. دالة الرسم (Drawing Logic)
+# 🎨 دالة الرسم (داخلية)
 # ==========================================
 async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
     try:
+        # ضمان أن userid نص وليس None
+        if not userid: userid = "Music Bot"
+        
         if os.path.isfile(thumbnail):
             source_art = Image.open(thumbnail).convert("RGBA")
         else:
             source_art = Image.new('RGBA', (500, 500), (30, 30, 30))
 
-        # تحسين الألوان والثيم
+        # 1. تحسين الألوان
         enhancer = ImageEnhance.Color(source_art)
         source_art = enhancer.enhance(1.3)
         dom_color = get_dominant_color(source_art)
         theme_tint = (dom_color[0]//2, dom_color[1]//2, dom_color[2]//2, 150)
 
-        # الخلفية
+        # 2. الخلفية
         background = source_art.resize((1280, 720), resample=LANCZOS)
         background = background.filter(ImageFilter.GaussianBlur(BLUR_VALUE))
         tint_layer = Image.new('RGBA', (1280, 720), theme_tint)
         background = Image.alpha_composite(background, tint_layer)
 
-        # الصورة البيضاوية
+        # 3. الصورة البيضاوية
         art_for_circle = ImageOps.fit(source_art, (OVAL_W, OVAL_H), centering=(0.5, 0.5), method=LANCZOS)
         mask = Image.new('L', (OVAL_W, OVAL_H), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, OVAL_W, OVAL_H), fill=255)
         
-        # التوهج
         glow_size = 15
         glow_mask = mask.filter(ImageFilter.GaussianBlur(glow_size))
         background.paste(dom_color, (OVAL_X - glow_size, OVAL_Y - glow_size), mask.resize((OVAL_W + glow_size*2, OVAL_H + glow_size*2)))
         background.paste(art_for_circle, (OVAL_X, OVAL_Y), mask)
 
-        # القالب
+        # 4. القالب
         overlay_path = "mydesign.png"
         if os.path.isfile(overlay_path):
             overlay = Image.open(overlay_path).convert("RGBA")
             overlay = overlay.resize((1280, 720), resample=LANCZOS)
             background = Image.alpha_composite(background, overlay)
 
-        # الكتابة
+        # 5. الكتابة
         draw = ImageDraw.Draw(background)
         
-        # العنوان
         f_title, safe_title = fit_text(draw, title, 42, 500)
         draw_shadow_text(draw, (TEXT_X, 185), safe_title, f_title, fill="white")
 
-        # By User Name
         f_info = get_font(30)
-        draw_shadow_text(draw, (TEXT_X, 255), f"Added By: {userid}", f_info, fill="#cccccc")
+        draw_shadow_text(draw, (TEXT_X, 255), f"Added By: {str(userid)}", f_info, fill="#cccccc")
         draw_shadow_text(draw, (TEXT_X, 320), f"Views: {smart_views(views)}", f_info, fill="#aaaaaa")
 
-        # التوقيت
         f_time = get_font(26)
         draw.line([(BAR_START, TIME_Y + 10), (BAR_END, TIME_Y + 10)], fill=(255, 255, 255, 100), width=4)
         draw_shadow_text(draw, (BAR_START, TIME_Y), "00:00", f_time)
@@ -138,9 +137,14 @@ async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         return thumbnail
 
 # ==========================================
-# 🚀 2. دالة التوليد الأساسية (Generation)
+# 🚀 الدالة الأساسية (تتعامل مع كل الحالات)
 # ==========================================
-async def gen_thumb(videoid, userid="Music Bot"):
+async def get_thumb(videoid, user_id="Music Bot"):
+    """
+    الدالة دي ذكية:
+    1. لو ناديتها بـ get_thumb(id) بس -> هتكتب Music Bot
+    2. لو ناديتها بـ get_thumb(id, user_id="Ahmed") -> هتكتب Ahmed
+    """
     if not os.path.exists("cache"):
         os.makedirs("cache")
     if os.path.isfile(f"cache/{videoid}.png"):
@@ -165,8 +169,8 @@ async def gen_thumb(videoid, userid="Music Bot"):
                     await f.write(await resp.read())
                     await f.close()
 
-        # هنا بنبعت الـ userid لدالة الرسم
-        final_image = await draw_thumb(f"cache/temp{videoid}.png", title, userid, "#ff0000", duration, views, videoid)
+        # استدعاء دالة الرسم
+        final_image = await draw_thumb(f"cache/temp{videoid}.png", title, user_id, "#ff0000", duration, views, videoid)
         
         try: os.remove(f"cache/temp{videoid}.png")
         except: pass     
@@ -175,10 +179,3 @@ async def gen_thumb(videoid, userid="Music Bot"):
     except Exception as e:
         print(e)
         return YOUTUBE_IMG_URL
-
-# ==========================================
-# 🛡️ 3. دالة الاستدعاء (Wrapper)
-# ==========================================
-# دي عشان لو فيه كود قديم بينادي get_thumb(videoid) بس ميموتش
-async def get_thumb(videoid):
-    return await gen_thumb(videoid, userid="Music Bot")
