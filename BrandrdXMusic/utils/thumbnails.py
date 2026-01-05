@@ -2,32 +2,33 @@ import os
 import re
 import aiofiles
 import aiohttp
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
 # ==========================================
-# 🛑 إعدادات التصميم
+# 🛑 الإحداثيات (مكان بداية الكلام أمام الخانات)
 # ==========================================
-OVAL_X, OVAL_Y = 160, 146
-OVAL_W, OVAL_H = 385, 355
-TEXT_X = 730
-BAR_START, BAR_END = 500, 1050 
-TIME_Y = 385 
-BLUR_VALUE = 3
+CIRCLE_X = 160; CIRCLE_Y = 146
+IMG_W = 385; IMG_H = 355
+
+# دي الأماكن اللي هيبدأ فيها كتابة "القيمة"
+NAME_X = 715; NAME_Y = 190          
+BY_X = 650; BY_Y = 255
+VIEWS_X = 711; VIEWS_Y = 310        
+
+TIME_START_X = 580; TIME_END_X = 1055; TIME_Y = 368 
+# ==========================================
 
 if hasattr(Image, "Resampling"):
     LANCZOS = Image.Resampling.LANCZOS
 else:
     LANCZOS = Image.LANCZOS
 
-# ==========================================
-# 🛠️ دوال مساعدة
-# ==========================================
 def get_font(size):
     possible_fonts = [
         "BrandrdXMusic/assets/font.ttf",
-        "BrandrdXMusic/font.ttf",
         "assets/font.ttf",
         "font.ttf"
     ]
@@ -36,154 +37,145 @@ def get_font(size):
             return ImageFont.truetype(font_path, size)
     return ImageFont.load_default()
 
-def smart_views(views):
+# دالة قص النص بذكاء عشان ميبوظش التصميم
+def truncate_text(draw, text, font, max_width):
     try:
-        if isinstance(views, str) and not views.isdigit(): return views
-        count = int(views)
-        if count >= 1_000_000: return f"{count / 1_000_000:.1f}M"
-        if count >= 1_000: return f"{count / 1_000:.1f}K"
-        return str(count)
-    except: return str(views)
+        w = draw.textlength(text, font=font)
+    except AttributeError:
+        w = draw.textsize(text, font=font)[0]
+    if w <= max_width:
+        return text
+    for i in range(len(text), 0, -1):
+        temp_text = text[:i] + "..."
+        try:
+            w_temp = draw.textlength(temp_text, font=font)
+        except AttributeError:
+            w_temp = draw.textsize(temp_text, font=font)[0]
+        if w_temp <= max_width:
+            return temp_text
+    return "..."
 
-def get_dominant_color(pil_img):
-    img = pil_img.copy().convert("RGBA").resize((1, 1), resample=0)
-    return img.getpixel((0, 0))
+# دالة تحويل المشاهدات (1.5M - 500K)
+def format_views(views):
+    try:
+        # لو القيمة جاية أصلاً نص وفيها حروف زي M أو K نرجعها زي ما هي بس نشيل كلمة views
+        views_str = str(views).lower().replace("views", "").replace("view", "").strip()
+        if "m" in views_str or "k" in views_str:
+            return views_str.upper()
+        
+        # لو رقم خام، نحوله احنا
+        val = int(re.sub(r'\D', '', views_str)) # استخراج الأرقام فقط
+        
+        if val >= 1_000_000:
+            return f"{val/1_000_000:.1f}M"
+        elif val >= 1_000:
+            return f"{val/1_000:.1f}K"
+        else:
+            return str(val)
+    except:
+        return str(views).replace("views", "").strip()
 
-def fit_text(draw, text, initial_size, max_width):
-    size = initial_size
-    font = get_font(size)
-    while size > 20:
-        try: w = draw.textlength(text, font=font)
-        except: w = draw.textsize(text, font=font)[0]
-        if w <= max_width: return font, text
-        size -= 2
-        font = get_font(size)
-    truncated = text
-    while len(truncated) > 0:
-        truncated = truncated[:-1]
-        try: w = draw.textlength(truncated + "...", font=font)
-        except: w = draw.textsize(truncated + "...", font=font)[0]
-        if w <= max_width: return font, truncated + "..."
-    return font, text
-
-def draw_shadow_text(draw, pos, text, font, fill="white"):
-    x, y = pos
-    draw.text((x + 2, y + 2), str(text), font=font, fill="black")
-    draw.text((x, y), str(text), font=font, fill=fill)
-
-# ==========================================
-# 🎨 دالة الرسم (Internal)
-# ==========================================
 async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
     try:
-        if not userid: userid = "Music Bot"
-
+        # 1. تجهيز الصورة والبلور الخفيف
         if os.path.isfile(thumbnail):
-            source_art = Image.open(thumbnail).convert("RGBA")
+            source = Image.open(thumbnail).convert("RGBA")
         else:
-            source_art = Image.new('RGBA', (500, 500), (30, 30, 30))
+            source = Image.new('RGBA', (1280, 720), (30, 30, 30))
 
-        # 1. Colors
-        enhancer = ImageEnhance.Color(source_art)
-        source_art = enhancer.enhance(1.3)
-        dom_color = get_dominant_color(source_art)
-        theme_tint = (dom_color[0]//2, dom_color[1]//2, dom_color[2]//2, 150)
-
-        # 2. Background
-        background = source_art.resize((1280, 720), resample=LANCZOS)
-        background = background.filter(ImageFilter.GaussianBlur(BLUR_VALUE))
-        tint_layer = Image.new('RGBA', (1280, 720), theme_tint)
-        background = Image.alpha_composite(background, tint_layer)
-
-        # 3. Circle/Oval
-        art_for_circle = ImageOps.fit(source_art, (OVAL_W, OVAL_H), centering=(0.5, 0.5), method=LANCZOS)
-        mask = Image.new('L', (OVAL_W, OVAL_H), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, OVAL_W, OVAL_H), fill=255)
+        background = source.resize((1280, 720), resample=LANCZOS)
+        background = background.filter(ImageFilter.GaussianBlur(2)) # بلور خفيف 2
         
-        glow_size = 15
-        glow_mask = mask.filter(ImageFilter.GaussianBlur(glow_size))
-        background.paste(dom_color, (OVAL_X - glow_size, OVAL_Y - glow_size), mask.resize((OVAL_W + glow_size*2, OVAL_H + glow_size*2)))
-        background.paste(art_for_circle, (OVAL_X, OVAL_Y), mask)
+        dark_layer = Image.new('RGBA', (1280, 720), (0, 0, 0, 50))
+        background = Image.alpha_composite(background, dark_layer)
 
-        # 4. Overlay (MyDesign)
-        overlay = None
-        possible_paths = [
-            "mydesign.png",
-            "BrandrdXMusic/assets/mydesign.png",
-            "assets/mydesign.png"
-        ]
-        for path in possible_paths:
-            if os.path.isfile(path):
-                overlay = Image.open(path).convert("RGBA")
-                break
-        
-        if overlay:
+        # 2. الدائرة
+        art_circle = ImageOps.fit(source, (IMG_W, IMG_H), centering=(0.5, 0.5), method=LANCZOS)
+        mask = Image.new('L', (IMG_W, IMG_H), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, IMG_W, IMG_H), fill=255)
+        background.paste(art_circle, (CIRCLE_X, CIRCLE_Y), mask)
+
+        # 3. القالب (overlay.png)
+        overlay_path = "BrandrdXMusic/assets/overlay.png"
+        if os.path.isfile(overlay_path):
+            overlay = Image.open(overlay_path).convert("RGBA")
             overlay = overlay.resize((1280, 720), resample=LANCZOS)
-            background = Image.alpha_composite(background, overlay)
+            background.paste(overlay, (0, 0), overlay)
 
-        # 5. Text
+        # 4. الكتابة (تعبئة البيانات فقط)
         draw = ImageDraw.Draw(background)
-        
-        f_title, safe_title = fit_text(draw, title, 42, 500)
-        draw_shadow_text(draw, (TEXT_X, 185), safe_title, f_title, fill="white")
+        f_title = get_font(45)  # خط الاسم
+        f_info = get_font(30)   # خط الفنان والمشاهدات
+        f_time = get_font(26)   # خط الوقت
 
-        f_info = get_font(30)
-        draw_shadow_text(draw, (TEXT_X, 255), f"Added By: {str(userid)}", f_info, fill="#cccccc")
-        draw_shadow_text(draw, (TEXT_X, 320), f"Views: {smart_views(views)}", f_info, fill="#aaaaaa")
+        # --- أ. اسم الأغنية (Title) ---
+        # بنحدد أقصى عرض للنص عشان ميبوظش (مثلاً 500 بكسل من نقطة البداية)
+        safe_title = truncate_text(draw, title, f_title, max_width=500)
+        draw.text((NAME_X, NAME_Y), safe_title, font=f_title, fill="white")
 
-        f_time = get_font(26)
-        draw.line([(BAR_START, TIME_Y + 10), (BAR_END, TIME_Y + 10)], fill=(255, 255, 255, 100), width=4)
-        draw_shadow_text(draw, (BAR_START, TIME_Y), "00:00", f_time)
-        draw_shadow_text(draw, (BAR_END - 50, TIME_Y), duration, f_time)
+        # --- ب. اسم الفنان (Artist / By) ---
+        safe_artist = truncate_text(draw, userid, f_info, max_width=450)
+        draw.text((BY_X, BY_Y), safe_artist, font=f_info, fill="#cccccc")
 
-        output = f"cache/{videoid}.png"
-        background.convert("RGB").save(output)
+        # --- ج. المشاهدات (Smart Views) ---
+        smart_views = format_views(views)
+        draw.text((VIEWS_X, VIEWS_Y), smart_views, font=f_info, fill="#aaaaaa")
+
+        # --- د. الوقت ---
+        draw.text((TIME_START_X, TIME_Y), "00:00", font=f_time, fill="white")
+        draw.text((TIME_END_X, TIME_Y), duration, font=f_time, fill="white")
+
+        # الحفظ
+        output = f"cache/{videoid}_final.png"
+        background.save(output)
         return output
         
     except Exception as e:
         print(f"Error in draw_thumb: {e}")
         return thumbnail
 
-# ==========================================
-# 🚀 الدوال الأساسية (Required Functions)
-# ==========================================
-
-# 1. gen_thumb: دي الدالة اللي البوت بيسأل عليها
-async def gen_thumb(videoid, userid="Music Bot"):
+async def get_thumb(videoid):
     if not os.path.exists("cache"):
         os.makedirs("cache")
-    if os.path.isfile(f"cache/{videoid}.png"):
-        return f"cache/{videoid}.png"
-    
+        
+    if os.path.isfile(f"cache/{videoid}_final.png"):
+        return f"cache/{videoid}_final.png"
+
     url = f"https://www.youtube.com/watch?v={videoid}"
     try:
         results = VideosSearch(url, limit=1)
-        for result in (await results.next())["result"]:
-            try: title = result["title"]; title = re.sub("\W+", " ", title); title = title.title()
-            except: title = "Unknown Track"
-            try: duration = result["duration"]
-            except: duration = "00:00"
-            thumbnail = result["thumbnails"][0]["url"]
-            try: views = result["viewCount"]["short"]
-            except: views = "Unknown Views"
+        res_dict = (await results.next())["result"][0]
+        
+        title = res_dict.get("title", "Unknown Title")
+        title = re.sub(r"\W+", " ", title).title()
+        
+        duration = res_dict.get("duration", "00:00")
+        
+        thumbnails = res_dict.get("thumbnails", [])
+        thumbnail_url = thumbnails[0]["url"] if thumbnails else YOUTUBE_IMG_URL
+        if len(thumbnails) > 1:
+            thumbnail_url = thumbnails[-1]["url"]
+
+        views = res_dict.get("viewCount", {}).get("short", "0") # هنا بيجيب الرقم الخام أو المختصر
+        channel = res_dict.get("channel", {}).get("name", "Unknown Artist")
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(thumbnail) as resp:
+            async with session.get(thumbnail_url) as resp:
                 if resp.status == 200:
-                    f = await aiofiles.open(f"cache/temp{videoid}.png", mode="wb")
+                    temp_path = f"cache/temp_{videoid}.png"
+                    f = await aiofiles.open(temp_path, mode="wb")
                     await f.write(await resp.read())
                     await f.close()
+                else:
+                    return YOUTUBE_IMG_URL
 
-        final_image = await draw_thumb(f"cache/temp{videoid}.png", title, userid, "#ff0000", duration, views, videoid)
+        final_image = await draw_thumb(temp_path, title, channel, None, duration, views, videoid)
         
-        try: os.remove(f"cache/temp{videoid}.png")
-        except: pass     
+        try: os.remove(temp_path)
+        except: pass
+        
         return final_image
-        
-    except Exception as e:
-        print(e)
-        return YOUTUBE_IMG_URL
 
-# 2. get_thumb: دي عشان التوافق مع الملفات القديمة
-async def get_thumb(videoid):
-    return await gen_thumb(videoid, userid="Music Bot")
+    except Exception as e:
+        print(f"Error in get_thumb: {e}")
+        return YOUTUBE_IMG_URL
