@@ -39,3 +39,5 @@ SafoneAPI
 opencv-python-headless==4.10.0.84
 speedtest-cli
 dnspython==2.6.1
+arabic-reshaper
+python-bidi
