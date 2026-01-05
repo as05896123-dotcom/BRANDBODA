@@ -3,15 +3,16 @@ import re
 import asyncio
 import aiofiles
 import aiohttp
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageChops
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
 # ==========================================
-# 🛑 الإحداثيات المقدسة (بدون تعديل)
+# 🛑 الإحداثيات المعدلة (نزلت 7 بيكسل)
 # ==========================================
-CIRCLE_POS = (160, 146)   # (X, Y)
-CIRCLE_SIZE = (385, 355)  # (Width, Height)
+# القديم كان 146، زودنا 7 بقى 153
+CIRCLE_POS = (160, 153)   
+CIRCLE_SIZE = (385, 355)  
 
 NAME_POS = (715, 190)
 BY_POS = (650, 255)
@@ -49,15 +50,14 @@ def format_views(views):
 
 def draw_shadowed_text(draw, pos, text, font, color="white"):
     x, y = pos
-    draw.text((x+2, y+2), text, font=font, fill="black") # ظل
-    draw.text((x, y), text, font=font, fill=color)       # أساسي
+    draw.text((x+2, y+2), text, font=font, fill="black") 
+    draw.text((x, y), text, font=font, fill=color)
 
 # ============================================================
-# 🎨 الرسام الذكي (Smart Renderer)
+# 🎨 الرسام الذكي (مع تقنية Screen Blending)
 # ============================================================
 async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, videoid):
     try:
-        # تجهيز البيانات
         title = str(title or "Unknown Track")
         userid = str(userid or "Unknown Artist")
         views = str(views or "0")
@@ -67,38 +67,45 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         except: source = Image.new('RGBA', (1280, 720), (30, 30, 30))
 
         # 2. الخلفية (Background) -> Blur = 3
-        # بنعمل ريسيز لـ 1280x720 وبعدين تغبيش خفيف
+        # بنغمق الصورة سنة بسيطة عشان الكلام يوضح فوقها
         background = source.resize((1280, 720), resample=LANCZOS)
         background = background.filter(ImageFilter.GaussianBlur(3))
+        
+        # إضافة طبقة تعتيم خفيفة جداً (اختياري لتحسين قراءة النص)
+        darkener = Image.new('RGBA', (1280, 720), (0, 0, 0, 50))
+        background = Image.alpha_composite(background, darkener)
 
-        # 3. القالب (Overlay)
-        # بيتحط الأول عشان الدائرة تيجي فوقه وتغطيه لو هو مش مفرغ
+        # 3. دمج القالب (Overlay) بتقنية Screen
+        # الحل السحري عشان الخلفية تظهر ورا القالب الأسود
         if os.path.isfile("BrandrdXMusic/assets/overlay.png"):
             try:
                 overlay = Image.open("BrandrdXMusic/assets/overlay.png").convert("RGBA")
                 overlay = overlay.resize((1280, 720), resample=LANCZOS)
+                
+                # تحويل الصور لـ RGB عشان الدمج يشتغل صح
+                bg_rgb = background.convert("RGB")
+                ov_rgb = overlay.convert("RGB")
+                
+                # Screen Blend: بيخلي الأسود شفاف ويحافظ على النيون
+                merged = ImageChops.screen(bg_rgb, ov_rgb)
+                background = merged.convert("RGBA")
+            except Exception as e:
+                # لو فشل الدمج، استخدم اللصق العادي
+                print(f"Overlay Error: {e}")
                 background.paste(overlay, (0, 0), overlay)
-            except: pass
 
         # 4. الدائرة الذكية (Smart Circle Fill)
-        # هنا بنقص الصورة بذكاء عشان تملا المربع المحدد (385x355) من غير مط
         try:
-            # تكبير 3 أضعاف عشان النعومة
             big_w, big_h = CIRCLE_SIZE[0] * 3, CIRCLE_SIZE[1] * 3
-            
-            # Smart Fit: دي بتاخد منتصف الصورة وتحافظ على الأبعاد
             smart_circle = ImageOps.fit(source, (big_w, big_h), centering=(0.5, 0.5), method=LANCZOS)
             
-            # عمل الماسك الدائري
             mask = Image.new('L', (big_w, big_h), 0)
-            draw_mask = ImageDraw.Draw(mask)
-            draw_mask.ellipse((0, 0, big_w, big_h), fill=255)
+            ImageDraw.Draw(mask).ellipse((0, 0, big_w, big_h), fill=255)
             
-            # تصغير للحجم المطلوب
             smart_circle = smart_circle.resize(CIRCLE_SIZE, resample=LANCZOS)
             mask = mask.resize(CIRCLE_SIZE, resample=LANCZOS)
             
-            # اللصق في الإحداثيات المحددة (فوق القالب)
+            # اللصق في الإحداثيات الجديدة (153)
             background.paste(smart_circle, CIRCLE_POS, mask)
         except Exception as e:
             print(f"Circle Error: {e}")
@@ -112,7 +119,6 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         draw_shadowed_text(draw, NAME_POS, smart_truncate(draw, title, f_45, 500), f_45, "white")
         draw_shadowed_text(draw, BY_POS, smart_truncate(draw, userid, f_30, 450), f_30, "#dddddd")
         draw_shadowed_text(draw, VIEWS_POS, format_views(views), f_30, "#cccccc")
-        
         draw_shadowed_text(draw, TIME_START, "00:00", f_26, "white")
         draw_shadowed_text(draw, TIME_END, duration, f_26, "white")
 
@@ -125,7 +131,7 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
         return thumbnail_path
 
 # ============================================================
-# 🦅 الصياد (Fetching Logic)
+# 🦅 الصياد
 # ============================================================
 async def gen_thumb(videoid, user_id=None):
     if not os.path.exists("cache"): os.makedirs("cache")
@@ -144,15 +150,13 @@ async def gen_thumb(videoid, user_id=None):
         views = res.get("viewCount", {}).get("short", "0")
         channel = res.get("channel", {}).get("name", "Unknown Artist")
         
-        # الروابط المحتملة
         candidates = [
-            f"https://img.youtube.com/vi/{videoid}/maxresdefault.jpg", # الأفضل
-            f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg",     # الجيد
-            f"https://img.youtube.com/vi/{videoid}/sddefault.jpg"      # المقبول
+            f"https://img.youtube.com/vi/{videoid}/maxresdefault.jpg",
+            f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg",
+            f"https://img.youtube.com/vi/{videoid}/sddefault.jpg"
         ]
         if res.get("thumbnails"): candidates.append(res["thumbnails"][-1]["url"])
 
-        # التحميل مع الإلحاح (Retry)
         downloaded = False
         async with aiohttp.ClientSession() as session:
             for img_url in candidates:
@@ -160,7 +164,7 @@ async def gen_thumb(videoid, user_id=None):
                     async with session.get(img_url, timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.read()
-                            if len(data) > 1000: # تأكد إن الملف سليم
+                            if len(data) > 1000:
                                 async with aiofiles.open(temp_path, mode="wb") as f:
                                     await f.write(data)
                                 downloaded = True
@@ -171,7 +175,6 @@ async def gen_thumb(videoid, user_id=None):
         if not downloaded: return YOUTUBE_IMG_URL
 
         final_img = await draw_thumb(temp_path, title, channel, None, duration, views, videoid)
-        
         if os.path.exists(temp_path): os.remove(temp_path)
         return final_img
 
