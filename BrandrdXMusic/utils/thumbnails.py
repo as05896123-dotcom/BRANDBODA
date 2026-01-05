@@ -8,16 +8,14 @@ from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
 # ==========================================
-# 🛑 الإحداثيات (مكان بداية الكلام أمام الخانات)
+# 🛑 الإحداثيات (Name, By, Views, Time)
 # ==========================================
 CIRCLE_X = 160; CIRCLE_Y = 146
 IMG_W = 385; IMG_H = 355
 
-# دي الأماكن اللي هيبدأ فيها كتابة "القيمة"
 NAME_X = 715; NAME_Y = 190          
 BY_X = 650; BY_Y = 255
 VIEWS_X = 711; VIEWS_Y = 310        
-
 TIME_START_X = 580; TIME_END_X = 1055; TIME_Y = 368 
 # ==========================================
 
@@ -37,7 +35,6 @@ def get_font(size):
             return ImageFont.truetype(font_path, size)
     return ImageFont.load_default()
 
-# دالة قص النص بذكاء عشان ميبوظش التصميم
 def truncate_text(draw, text, font, max_width):
     try:
         w = draw.textlength(text, font=font)
@@ -55,77 +52,59 @@ def truncate_text(draw, text, font, max_width):
             return temp_text
     return "..."
 
-# دالة تحويل المشاهدات (1.5M - 500K)
 def format_views(views):
     try:
-        # لو القيمة جاية أصلاً نص وفيها حروف زي M أو K نرجعها زي ما هي بس نشيل كلمة views
         views_str = str(views).lower().replace("views", "").replace("view", "").strip()
         if "m" in views_str or "k" in views_str:
             return views_str.upper()
-        
-        # لو رقم خام، نحوله احنا
-        val = int(re.sub(r'\D', '', views_str)) # استخراج الأرقام فقط
-        
-        if val >= 1_000_000:
-            return f"{val/1_000_000:.1f}M"
-        elif val >= 1_000:
-            return f"{val/1_000:.1f}K"
-        else:
-            return str(val)
+        val = int(re.sub(r'\D', '', views_str))
+        if val >= 1_000_000: return f"{val/1_000_000:.1f}M"
+        elif val >= 1_000: return f"{val/1_000:.1f}K"
+        return str(val)
     except:
         return str(views).replace("views", "").strip()
 
 async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
     try:
-        # 1. تجهيز الصورة والبلور الخفيف
         if os.path.isfile(thumbnail):
             source = Image.open(thumbnail).convert("RGBA")
         else:
             source = Image.new('RGBA', (1280, 720), (30, 30, 30))
 
         background = source.resize((1280, 720), resample=LANCZOS)
-        background = background.filter(ImageFilter.GaussianBlur(2)) # بلور خفيف 2
+        background = background.filter(ImageFilter.GaussianBlur(2))
         
         dark_layer = Image.new('RGBA', (1280, 720), (0, 0, 0, 50))
         background = Image.alpha_composite(background, dark_layer)
 
-        # 2. الدائرة
         art_circle = ImageOps.fit(source, (IMG_W, IMG_H), centering=(0.5, 0.5), method=LANCZOS)
         mask = Image.new('L', (IMG_W, IMG_H), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, IMG_W, IMG_H), fill=255)
         background.paste(art_circle, (CIRCLE_X, CIRCLE_Y), mask)
 
-        # 3. القالب (overlay.png)
         overlay_path = "BrandrdXMusic/assets/overlay.png"
         if os.path.isfile(overlay_path):
             overlay = Image.open(overlay_path).convert("RGBA")
             overlay = overlay.resize((1280, 720), resample=LANCZOS)
             background.paste(overlay, (0, 0), overlay)
 
-        # 4. الكتابة (تعبئة البيانات فقط)
         draw = ImageDraw.Draw(background)
-        f_title = get_font(45)  # خط الاسم
-        f_info = get_font(30)   # خط الفنان والمشاهدات
-        f_time = get_font(26)   # خط الوقت
+        f_title = get_font(45)
+        f_info = get_font(30)
+        f_time = get_font(26)
 
-        # --- أ. اسم الأغنية (Title) ---
-        # بنحدد أقصى عرض للنص عشان ميبوظش (مثلاً 500 بكسل من نقطة البداية)
         safe_title = truncate_text(draw, title, f_title, max_width=500)
         draw.text((NAME_X, NAME_Y), safe_title, font=f_title, fill="white")
 
-        # --- ب. اسم الفنان (Artist / By) ---
         safe_artist = truncate_text(draw, userid, f_info, max_width=450)
         draw.text((BY_X, BY_Y), safe_artist, font=f_info, fill="#cccccc")
 
-        # --- ج. المشاهدات (Smart Views) ---
         smart_views = format_views(views)
         draw.text((VIEWS_X, VIEWS_Y), smart_views, font=f_info, fill="#aaaaaa")
 
-        # --- د. الوقت ---
         draw.text((TIME_START_X, TIME_Y), "00:00", font=f_time, fill="white")
         draw.text((TIME_END_X, TIME_Y), duration, font=f_time, fill="white")
 
-        # الحفظ
         output = f"cache/{videoid}_final.png"
         background.save(output)
         return output
@@ -134,7 +113,8 @@ async def draw_thumb(thumbnail, title, userid, theme, duration, views, videoid):
         print(f"Error in draw_thumb: {e}")
         return thumbnail
 
-async def get_thumb(videoid):
+# ✅ تم تغيير الاسم هنا من get_thumb لـ gen_thumb عشان يشتغل مع البوت
+async def gen_thumb(videoid):
     if not os.path.exists("cache"):
         os.makedirs("cache")
         
@@ -156,7 +136,7 @@ async def get_thumb(videoid):
         if len(thumbnails) > 1:
             thumbnail_url = thumbnails[-1]["url"]
 
-        views = res_dict.get("viewCount", {}).get("short", "0") # هنا بيجيب الرقم الخام أو المختصر
+        views = res_dict.get("viewCount", {}).get("short", "0")
         channel = res_dict.get("channel", {}).get("name", "Unknown Artist")
 
         async with aiohttp.ClientSession() as session:
@@ -177,5 +157,5 @@ async def get_thumb(videoid):
         return final_image
 
     except Exception as e:
-        print(f"Error in get_thumb: {e}")
+        print(f"Error in gen_thumb: {e}")
         return YOUTUBE_IMG_URL
