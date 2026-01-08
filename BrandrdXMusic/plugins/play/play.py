@@ -1,7 +1,9 @@
+import asyncio
 import random
 import string
 
 from pyrogram import filters
+from pyrogram.errors import FloodWait, RandomIdDuplicate
 from pyrogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
 from pytgcalls.exceptions import NoActiveGroupCall
 
@@ -36,7 +38,13 @@ from config import BANNED_USERS, lyrical
             "vplayforce",
             "cplayforce",
             "cvplayforce",
-        ]
+            "شغل",
+            "سمعني",
+            "تشغيل",
+            "فيديو",
+            "فيد",
+        ],
+        prefixes=["/", "!", ".", "", "@", "#"]
     )
     & filters.group
     & ~BANNED_USERS
@@ -53,6 +61,11 @@ async def play_commnd(
     url,
     fplay,
 ):
+    # تحديد نوع التشغيل بناءً على النص العربي
+    cmd_text = message.text.split()[0].replace("/", "").replace("!", "").replace(".", "")
+    if cmd_text in ["فيديو", "فيد"]:
+        video = True
+    
     mystic = await message.reply_text(
         _["play_2"].format(channel) if channel else _["play_1"]
     )
@@ -73,7 +86,7 @@ async def play_commnd(
         else None
     )
     if audio_telegram:
-        if audio_telegram.file_size > 104857600:
+        if audio_telegram.file_size > config.TG_AUDIO_FILESIZE_LIMIT:
             return await mystic.edit_text(_["play_5"])
         duration_min = seconds_to_min(audio_telegram.duration)
         if (audio_telegram.duration) > config.DURATION_LIMIT:
@@ -516,8 +529,7 @@ async def piyush_check(client, CallbackQuery):
 @languageCB
 async def play_playlists_command(client, CallbackQuery, _):
     callback_data = CallbackQuery.data.strip()
-    callback_request = callback_data.split(None, 1)[1]
-    (
+    callback_request = callback_data.split(None, 1)[1](
         videoid,
         user_id,
         ptype,
@@ -603,8 +615,7 @@ async def play_playlists_command(client, CallbackQuery, _):
 @languageCB
 async def slider_queries(client, CallbackQuery, _):
     callback_data = CallbackQuery.data.strip()
-    callback_request = callback_data.split(None, 1)[1]
-    (
+    callback_request = callback_data.split(None, 1)[1](
         what,
         rtype,
         query,
@@ -660,4 +671,4 @@ async def slider_queries(client, CallbackQuery, _):
         )
         return await CallbackQuery.edit_message_media(
             media=med, reply_markup=InlineKeyboardMarkup(buttons)
-)
+        )
