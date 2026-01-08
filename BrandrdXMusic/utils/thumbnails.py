@@ -9,19 +9,38 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageChops
 from youtubesearchpython.__future__ import VideosSearch
 from config import YOUTUBE_IMG_URL
 
-# 🟢 استيراد مكتبات العربي بأمان
+# ===================================================
+# 🛡️ MONKEY PATCH: الحل النهائي لمشكلة HTTPX Proxy
+# ===================================================
+import httpx
+from httpx import AsyncClient
+
+# 1. نحتفظ بالدالة الأصلية
+_original_init = AsyncClient.__init__
+
+# 2. نصنع دالة معدلة تحذف الـ proxies المسببة للمشاكل
+def _patched_init(self, *args, **kwargs):
+    if 'proxies' in kwargs:
+        kwargs.pop('proxies')
+    return _original_init(self, *args, **kwargs)
+
+# 3. نطبق التعديل فوراً
+AsyncClient.__init__ = _patched_init
+# ===================================================
+
+# 🟢 استيراد مكتبات العربي بأمان تام
 try:
     import arabic_reshaper
     from bidi.algorithm import get_display
 except ImportError:
-    print("⚠️ Arabic libraries missing.")
+    # إنشاء دوال وهمية لمنع الانهيار
     def get_display(text): return str(text)
     class arabic_reshaper:
         @staticmethod
         def reshape(text): return str(text)
 
 # ==================================================================
-# ⚙️ الإحداثيات
+# ⚙️ الإحداثيات والتصميم
 # ==================================================================
 BOX_LEFT = 115
 BOX_TOP = 122
@@ -47,47 +66,35 @@ COLOR_BY = "#cccccc"
 COLOR_NAME = "white"
 COLOR_GLOW = "#00d4ff"
 
-# التأكد من نسخة Pillow
+# التأكد من نسخة Pillow للتوافق
 if hasattr(Image, "Resampling"):
     LANCZOS = Image.Resampling.LANCZOS
 else:
     LANCZOS = Image.LANCZOS
 
 # ==================================================================
-# 🧠 دالة اختبار الخط (بدون أخطاء)
+# 🧠 دوال مساعدة (Fonts & Text)
 # ==================================================================
 def is_font_valid(font_obj):
     if font_obj is None: return False
     try:
-        test_word = "تجربة"
-        reshaped_word = arabic_reshaper.reshape(test_word)
-        display_word = get_display(reshaped_word)
-        
+        # اختبار بسيط للخط
         width = 0
-        try:
-            # محاولة للطريقة الجديدة
-            if hasattr(font_obj, 'getlength'):
-                width = font_obj.getlength(display_word)
-            # محاولة للطريقة القديمة
-            elif hasattr(font_obj, 'getsize'):
-                width = font_obj.getsize(display_word)[0]
-        except:
-            return False
-
-        if width and width > 5:
-            return True
-        return False
+        if hasattr(font_obj, 'getlength'):
+            width = font_obj.getlength("Test")
+        elif hasattr(font_obj, 'getsize'):
+            width = font_obj.getsize("Test")[0]
+        return width > 0
     except:
         return False
 
 def get_font(size):
+    # قائمة مسارات محتملة للخطوط
     candidates = [
         "assets/font.ttf",
         "BrandrdXMusic/assets/font.ttf",
         "font.ttf",
         "cache/Tajawal-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "arial.ttf"
     ]
 
@@ -98,7 +105,7 @@ def get_font(size):
                 if is_font_valid(font): return font
             except: continue
 
-    # Fallback Download
+    # تحميل الخط من الإنترنت إذا لم يوجد (خطة بديلة)
     try:
         url = "https://github.com/google/fonts/raw/main/ofl/tajawal/Tajawal-Bold.ttf"
         target = "cache/Tajawal-Bold.ttf"
@@ -111,10 +118,6 @@ def get_font(size):
     except: pass
 
     return ImageFont.load_default()
-
-# ==================================================================
-# 🛠️ الدوال المساعدة (بدون TypeError)
-# ==================================================================
 
 def fix_text(text):
     if text is None: return ""
@@ -129,11 +132,8 @@ def fix_text(text):
 def smart_truncate(draw, text, font, max_width):
     if text is None: return "..."
     text = str(text)
-    
     try:
         display_text = fix_text(text)
-        
-        # قياس العرض بأمان
         w = 0
         try:
             if hasattr(draw, 'textlength'):
@@ -144,11 +144,10 @@ def smart_truncate(draw, text, font, max_width):
 
         if w <= max_width: return display_text
         
-        # التقصير التدريجي
+        # تقصير النص تدريجياً
         for i in range(len(text), 0, -1):
             temp_text = text[:i] + "..."
             temp_display = fix_text(temp_text)
-            
             w_temp = 0
             try:
                 if hasattr(draw, 'textlength'):
@@ -175,31 +174,40 @@ def draw_shadowed_text(draw, pos, text, font, color="white", shadow_color="black
     try:
         x, y = pos
         text = str(text)
+        # الظل
         draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+        # النص الأصلي
         draw.text((x, y), text, font=font, fill=color)
     except: pass
 
 def draw_neon_text(base_img, pos, text, font):
     try:
         text = fix_text(str(text))
+        # طبقة التوهج
         glow_layer = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_layer)
         glow_draw.text(pos, text, font=font, fill=COLOR_GLOW)
         glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=8))
+        
         base_img.alpha_composite(glow_layer)
+        
+        # النص الأبيض فوق التوهج
         final_draw = ImageDraw.Draw(base_img)
         final_draw.text(pos, text, font=font, fill=(255, 255, 255, 240))
     except: pass
 
+# ==================================================================
+# 🎨 دالة الرسم الرئيسية
+# ==================================================================
 async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, videoid):
     try:
-        # Load Image Safe
+        # تحميل الصورة الأساسية بأمان
         if os.path.exists(thumbnail_path):
             try: source = Image.open(thumbnail_path).convert("RGBA")
             except: source = Image.new('RGBA', (1280, 720), (30, 30, 30))
         else: source = Image.new('RGBA', (1280, 720), (30, 30, 30))
 
-        # Background Processing
+        # معالجة الخلفية
         try:
             background = source.resize((1280, 720), resample=LANCZOS)
             background = background.filter(ImageFilter.GaussianBlur(3))
@@ -207,7 +215,7 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
             background = Image.alpha_composite(background, dark_layer)
         except: background = Image.new('RGBA', (1280, 720), (0, 0, 0))
 
-        # Circle Art
+        # الصورة الدائرية
         try:
             art_cropped = ImageOps.fit(source, ART_SIZE, centering=(0.5, 0.5), method=LANCZOS)
             mask = Image.new('L', ART_SIZE, 0)
@@ -216,20 +224,22 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
             background.paste(art_cropped, ART_POS, mask)
         except: pass
 
-        # Overlay
+        # طبقة الأوفرلاي (Overlay)
         try:
             overlay_path = "BrandrdXMusic/assets/overlay.png"
             if not os.path.isfile(overlay_path): overlay_path = "assets/overlay.png"
+            
             if os.path.isfile(overlay_path):
                 overlay = Image.open(overlay_path).convert("RGBA")
                 overlay = overlay.resize((1280, 720), resample=LANCZOS)
                 bg_rgb = background.convert("RGB")
                 ov_rgb = overlay.convert("RGB")
+                # دمج الألوان بوضع Screen
                 merged = ImageChops.screen(bg_rgb, ov_rgb)
                 background = merged.convert("RGBA")
         except: pass
 
-        # Draw Text
+        # رسم النصوص
         try:
             draw = ImageDraw.Draw(background)
             f_50 = get_font(50)
@@ -247,9 +257,10 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
 
             draw_neon_text(background, POS_TIME_START, "00:00", f_30)
             draw_neon_text(background, POS_TIME_END, str(duration), f_30)
-        except Exception as e: print(f"Text Drawing Error: {e}")
+        except Exception as e: 
+            print(f"Text Drawing Error: {e}")
 
-        # Save
+        # حفظ الصورة النهائية
         if not os.path.exists("cache"): os.makedirs("cache", exist_ok=True)
         final_path = f"cache/{videoid}_final.png"
         background.save(final_path, format="PNG")
@@ -257,17 +268,24 @@ async def draw_thumb(thumbnail_path, title, userid, theme, duration, views, vide
 
     except Exception as e:
         print(f"Global Thumb Error: {e}")
+        # في حالة الفشل نرجع الصورة الأصلية لو موجودة، أو صورة اليوتيوب الافتراضية
         return thumbnail_path if os.path.exists(thumbnail_path) else YOUTUBE_IMG_URL
 
+# ==================================================================
+# 📥 دالة المولد الرئيسية
+# ==================================================================
 async def gen_thumb(videoid, user_id=None):
     if not os.path.exists("cache"): os.makedirs("cache", exist_ok=True)
     final_path = f"cache/{videoid}_final.png"
+    
+    # لو الصورة معمولة قبل كدة نرجعها ونوفر وقت
     if os.path.isfile(final_path): return final_path
 
     temp_path = f"cache/temp_{videoid}.png"
     url = f"https://www.youtube.com/watch?v={videoid}"
 
     try:
+        # البحث عن بيانات الفيديو
         search = VideosSearch(url, limit=1)
         res = await search.next()
         data = res["result"][0]
@@ -277,6 +295,7 @@ async def gen_thumb(videoid, user_id=None):
         views = data.get("viewCount", {}).get("short", "0")
         channel = data.get("channel", {}).get("name", "Unknown Artist")
         
+        # محاولة تحميل أعلى جودة للصورة
         candidates = [
             f"https://img.youtube.com/vi/{videoid}/maxresdefault.jpg",
             f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg"
@@ -290,7 +309,7 @@ async def gen_thumb(videoid, user_id=None):
                     async with session.get(u, timeout=5) as r:
                         if r.status == 200:
                             d = await r.read()
-                            if len(d) > 1000:
+                            if len(d) > 1000: # التأكد إن الملف مش تالف
                                 async with aiofiles.open(temp_path, "wb") as f: await f.write(d)
                                 downloaded = True
                                 break
@@ -298,7 +317,11 @@ async def gen_thumb(videoid, user_id=None):
                 if downloaded: break
         
         if not downloaded: return YOUTUBE_IMG_URL
+        
+        # استدعاء دالة الرسم
         final = await draw_thumb(temp_path, title, channel, None, duration, views, videoid)
+        
+        # تنظيف الملفات المؤقتة
         if os.path.exists(temp_path): os.remove(temp_path)
         return final
 
@@ -306,4 +329,5 @@ async def gen_thumb(videoid, user_id=None):
         traceback.print_exc()
         return YOUTUBE_IMG_URL
 
+# تصدير الدالة للاستخدام
 get_thumb = gen_thumb
