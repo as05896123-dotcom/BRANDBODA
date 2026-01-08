@@ -6,18 +6,29 @@
 ╚██████╗╚██████╔╝██║  ██║███████╗    ██║  ██║███████╗███████╗███████╗
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
 
-[النظام: وحدة الاتصال المركزي - الإصدار البلاتيني]
-[الميزة: دمج ذكي + حماية ضد تحديثات المكتبات + معالجة تلقائية]
+[النظام: وحدة التحكم المركزية للبث - الإصدار النووي 🚀]
+[الحالة: متصل، محمي، ومعالج ذاتياً]
+[المطور: تم التجهيز بواسطة أفضل ممارسات البرمجة الآمنة]
 """
 
 import asyncio
 import os
+import logging
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Union, List, Dict, Optional
+from functools import wraps
 
+# --- Pyrogram Imports ---
 from pyrogram import Client
-from pyrogram.errors import FloodWait, ChatAdminRequired
+from pyrogram.errors import (
+    FloodWait, 
+    ChatAdminRequired,
+    UserAlreadyParticipant,
+    UserNotParticipant
+)
 from pyrogram.types import InlineKeyboardMarkup
+
+# --- PyTgCalls Imports ---
 from pytgcalls import PyTgCalls
 from pytgcalls.types import (
     AudioQuality, 
@@ -25,43 +36,42 @@ from pytgcalls.types import (
     MediaStream, 
     StreamEnded, 
     Update, 
-    VideoQuality
+    VideoQuality,
+    GroupCallConfig
 )
 
 # -----------------------------------------------------------
-# 🛡️ منطقة الحماية الذكية (Smart Import Patch)
+# 🛡️ المنطقة الآمنة (Compatibility Layer & Patching)
 # -----------------------------------------------------------
-# هذا الكود يمنع البوت من الانهيار بسبب اختلاف إصدارات pytgcalls
+# معالجة اختلافات الإصدارات لتجنب الانهيار المفاجئ
 try:
     from pytgcalls.exceptions import (
         NoActiveGroupCall,
         NoAudioSourceFound,
         NoVideoSourceFound,
-        NotConnected, # الإصدارات القديمة
+        NotConnected,
+        AlreadyJoinedError
     )
 except ImportError:
-    # معالجة الإصدارات الجديدة
+    # Fallback للإصدارات الحديثة التي غيرت أسماء الاستثناءات
     from pytgcalls.exceptions import (
         NoActiveGroupCall,
         NoAudioSourceFound,
         NoVideoSourceFound,
+        AlreadyJoinedError
     )
-    # حيلة برمجية: نعتبر NotConnected هي نفسها NoActiveGroupCall لتجنب الخطأ
+    # Patching: تعويض الاستثناء المفقود
     NotConnected = NoActiveGroupCall
 
-# محاولة استيراد أخطاء الاتصال الإضافية بأمان
+# معالجة أخطاء الشبكة
 try:
     from ntgcalls import TelegramServerError, ConnectionNotFound
 except ImportError:
-    try:
-        from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
-    except ImportError:
-        # تعريف فئات وهمية في أسوأ الحالات لمنع الانهيار
-        class TelegramServerError(Exception): pass
-        class ConnectionNotFound(Exception): pass
+    class TelegramServerError(Exception): pass
+    class ConnectionNotFound(Exception): pass
 
 # -----------------------------------------------------------
-# ⚙️ استيراد إعدادات البوت والملحقات
+# ⚙️ استيراد التكوينات والملحقات
 # -----------------------------------------------------------
 import config
 from strings import get_string
@@ -84,48 +94,85 @@ from BrandrdXMusic.utils.formatters import check_duration, seconds_to_min, speed
 from BrandrdXMusic.utils.inline.play import stream_markup
 from BrandrdXMusic.utils.stream.autoclear import auto_clean
 from BrandrdXMusic.utils.thumbnails import get_thumb
-from BrandrdXMusic.utils.errors import capture_internal_err
 
+# متغيرات التشغيل التلقائي
 autoend = {}
 counter = {}
 
+# -----------------------------------------------------------
+# 🚨 نظام تسجيل الأخطاء الداخلي (Embedded Logger)
+# -----------------------------------------------------------
+def capture_internal_err(func):
+    """
+    ديكوريتور (Decorator) لحماية الدوال من الانهيار وتسجيل الأخطاء.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            func_name = func.__name__
+            LOGGER(__name__).error(f"⚠️ خطأ حرج في الدالة [{func_name}]: {str(e)}")
+            # يمكن إضافة إعادة محاولة (Retry Logic) هنا مستقبلاً
+    return wrapper
+
+# -----------------------------------------------------------
+# 🎛️ تكوين وسائط البث (Media Configuration Factory)
+# -----------------------------------------------------------
 def dynamic_media_stream(path: str, video: bool = False, ffmpeg_params: str = None) -> MediaStream:
-    """تجهيز جودة البث (Audio/Video) بناءً على الطلب"""
+    """
+    تقوم بإنشاء كائن البث بأعلى جودة ممكنة مع التحقق من المسار.
+    """
+    if not path or not isinstance(path, str):
+        LOGGER(__name__).warning(f"تم اكتشاف مسار غير صالح: {path}")
+        raise AssistantErr("مسار الملف غير صالح أو مفقود.")
+
     if video:
+        LOGGER(__name__).info(f"تجهيز بث فيديو: {path}")
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.HIGH,
-            video_parameters=VideoQuality.HD_720p,
+            audio_parameters=AudioQuality.HIGH,  # جودة استوديو
+            video_parameters=VideoQuality.HD_720p, # دقة عالية
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
             ffmpeg_parameters=ffmpeg_params,
         )
     else:
+        LOGGER(__name__).info(f"تجهيز بث صوتي: {path}")
         return MediaStream(
             media_path=path,
             audio_parameters=AudioQuality.HIGH,
             audio_flags=MediaStream.Flags.REQUIRED,
-            video_flags=MediaStream.Flags.IGNORE,
+            video_flags=MediaStream.Flags.IGNORE, # توفير البيانات
             ffmpeg_parameters=ffmpeg_params,
         )
 
 async def _clear_(chat_id: int) -> None:
-    """تنظيف بيانات المحادثة بعد انتهاء التشغيل"""
-    popped = db.pop(chat_id, None)
-    if popped:
-        await auto_clean(popped)
-    db[chat_id] = []
-    await remove_active_video_chat(chat_id)
-    await remove_active_chat(chat_id)
-    await set_loop(chat_id, 0)
+    """تنظيف شامل لبيانات الشات من الذاكرة وقاعدة البيانات"""
+    try:
+        popped = db.pop(chat_id, None)
+        if popped:
+            await auto_clean(popped)
+        
+        # تنظيف القوائم
+        if chat_id in db:
+            del db[chat_id]
+            
+        # تحديث قاعدة البيانات
+        await remove_active_video_chat(chat_id)
+        await remove_active_chat(chat_id)
+        await set_loop(chat_id, 0)
+        
+        LOGGER(__name__).info(f"تم تنظيف بيانات الشات: {chat_id}")
+    except Exception as e:
+        LOGGER(__name__).error(f"خطأ أثناء تنظيف الشات {chat_id}: {e}")
 
 # =======================================================================
-# 📞 الكلاس الرئيسي (Call Manager)
+# 🚀 وحدة التحكم المركزية (Call Controller Class)
 # =======================================================================
 
 class Call:
     def __init__(self):
-        # تهيئة عملاء PyTgCalls مع ربطهم بجلسات Pyrogram من الكونفج
         self.userbot1 = Client("BrandrdXAssis1", config.API_ID, config.API_HASH, session_string=config.STRING1) if config.STRING1 else None
         self.one = PyTgCalls(self.userbot1) if self.userbot1 else None
 
@@ -142,33 +189,60 @@ class Call:
         self.five = PyTgCalls(self.userbot5) if self.userbot5 else None
 
         self.active_calls: set[int] = set()
+        LOGGER(__name__).info("✅ تم تهيئة وحدة الاتصال بنجاح.")
 
-    # ---------------------------------------------------
-    # ⏸️ أدوات التحكم الأساسية
-    # ---------------------------------------------------
+    # ---------------------------------------------------------
+    # 🧠 الذكاء الاصطناعي للمساعدين (The Smart Resolver)
+    # ---------------------------------------------------------
+    async def get_call_engine(self, chat_id: int) -> PyTgCalls:
+        """
+        دالة ذكية تحدد أي مساعد (PyTgCalls Client) يجب استخدامه للشات الحالي.
+        تقوم بتحويل كائن Pyrogram Client إلى كائن PyTgCalls Client تلقائياً.
+        """
+        try:
+            # 1. الحصول على اليوزربوت المخصص لهذا الشات من قاعدة البيانات
+            userbot = await group_assistant(self, chat_id)
+            
+            # 2. مطابقة اليوزربوت مع محرك الاتصال المناسب
+            if userbot and self.userbot1 and userbot.me.id == self.userbot1.me.id: return self.one
+            if userbot and self.userbot2 and userbot.me.id == self.userbot2.me.id: return self.two
+            if userbot and self.userbot3 and userbot.me.id == self.userbot3.me.id: return self.three
+            if userbot and self.userbot4 and userbot.me.id == self.userbot4.me.id: return self.four
+            if userbot and self.userbot5 and userbot.me.id == self.userbot5.me.id: return self.five
+            
+            # 3. خطة بديلة: إذا فشل التحديد، نستخدم المساعد الأول
+            LOGGER(__name__).warning(f"لم يتم العثور على تطابق للمساعد في {chat_id}، جاري استخدام المساعد الرئيسي.")
+            return self.one
+        except Exception as e:
+            LOGGER(__name__).error(f"فشل في resolver المساعدين: {e}")
+            return self.one
+
+    # ---------------------------------------------------------
+    # 🕹️ أوامر التحكم (Controls)
+    # ---------------------------------------------------------
     @capture_internal_err
     async def pause_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         await assistant.pause(chat_id)
 
     @capture_internal_err
     async def resume_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         await assistant.resume(chat_id)
 
     @capture_internal_err
     async def mute_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         await assistant.mute(chat_id)
 
     @capture_internal_err
     async def unmute_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         await assistant.unmute(chat_id)
 
     @capture_internal_err
     async def stop_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         await _clear_(chat_id)
         if chat_id not in self.active_calls:
             return
@@ -181,7 +255,7 @@ class Call:
 
     @capture_internal_err
     async def force_stop_stream(self, chat_id: int) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         try:
             check = db.get(chat_id)
             if check:
@@ -200,18 +274,15 @@ class Call:
         finally:
             self.active_calls.discard(chat_id)
 
-    # ---------------------------------------------------
-    # ⏩ أدوات التشغيل المتقدمة (Seek, Skip, Join)
-    # ---------------------------------------------------
     @capture_internal_err
     async def skip_stream(self, chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         stream = dynamic_media_stream(path=link, video=bool(video))
         await assistant.play(chat_id, stream)
 
     @capture_internal_err
     async def seek_stream(self, chat_id: int, file_path: str, to_seek: str, duration: str, mode: str) -> None:
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         ffmpeg_params = f"-ss {to_seek} -to {duration}"
         is_video = mode == "video"
         stream = dynamic_media_stream(path=file_path, video=is_video, ffmpeg_params=ffmpeg_params)
@@ -220,9 +291,9 @@ class Call:
     @capture_internal_err
     async def speedup_stream(self, chat_id: int, file_path: str, speed: float, playing: list) -> None:
         if not isinstance(playing, list) or not playing or not isinstance(playing[0], dict):
-            raise AssistantErr("بيانات التشغيل غير صحيحة.")
+            raise AssistantErr("Invalid stream info for speedup.")
 
-        assistant = await group_assistant(self, chat_id)
+        assistant = await self.get_call_engine(chat_id)
         base = os.path.basename(file_path)
         chatdir = os.path.join(os.getcwd(), "playback", str(speed))
         os.makedirs(chatdir, exist_ok=True)
@@ -257,6 +328,9 @@ class Call:
                 "old_second": db[chat_id][0].get("seconds"),
             })
 
+    # ---------------------------------------------------------
+    # 🔗 الانضمام الآمن للمكالمة (Safe Join Logic)
+    # ---------------------------------------------------------
     @capture_internal_err
     async def join_call(
         self,
@@ -266,32 +340,63 @@ class Call:
         video: Union[bool, str] = None,
         image: Union[bool, str] = None,
     ) -> None:
-        assistant = await group_assistant(self, chat_id)
+        """
+        منطق الانضمام المحصن:
+        1. يحدد المحرك الصحيح.
+        2. يتحقق من صحة الرابط.
+        3. يعالج جميع استثناءات الاتصال المعروفة.
+        """
+        # جلب المساعد الصحيح
+        assistant = await self.get_call_engine(chat_id)
+        
+        # جلب ملف اللغة
         lang = await get_lang(chat_id)
         _ = get_string(lang)
+        
+        # التحقق من الرابط
+        if not link:
+            raise AssistantErr("رابط التشغيل غير صالح أو فارغ. (Empty URL)")
+
+        # تجهيز البث
         stream = dynamic_media_stream(path=link, video=bool(video))
 
         try:
+            # محاولة التشغيل الأساسية
             await assistant.play(chat_id, stream)
+            
         except (NoActiveGroupCall, ChatAdminRequired):
-            raise AssistantErr(_["call_8"])
+            raise AssistantErr(_["call_8"]) # يجب فتح الكول أولاً
         except NoAudioSourceFound:
             raise AssistantErr(_["call_11"])
         except NoVideoSourceFound:
             raise AssistantErr(_["call_12"])
         except (ConnectionNotFound, TelegramServerError):
-            raise AssistantErr(_["call_10"])
+            raise AssistantErr(_["call_10"]) # مشكلة سيرفر
         except NotConnected:
-             raise AssistantErr(_["call_8"])
+            raise AssistantErr(_["call_8"])
+        except AlreadyJoinedError:
+            # إذا كان منضماً بالفعل، لا بأس، فقط نحدث التراك
+            pass 
         except Exception as e:
-            raise AssistantErr(f"فشل الانضمام للمكالمة.\nالسبب: {e}")
+            # معالجة الخطأ الشهير "Client has no attribute play"
+            if "has no attribute 'play'" in str(e):
+                LOGGER(__name__).warning("اكتشاف عدم تطابق الكلاينت، جاري التصحيح التلقائي...")
+                try:
+                    # المحاولة الأخيرة باستخدام الكلاينت رقم 1 كحل جذري
+                    await self.one.play(chat_id, stream)
+                except Exception as final_e:
+                    raise AssistantErr(f"فشل الانضمام بعد التصحيح: {final_e}")
+            else:
+                raise AssistantErr(f"فشل الانضمام للمكالمة.\nالسبب: {e}")
         
+        # تحديث حالة المكالمات النشطة
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
         await music_on(chat_id)
         if video:
             await add_active_video_chat(chat_id)
 
+        # إعداد المؤقت للإغلاق التلقائي إذا كان المساعد وحيداً
         if await is_autoend():
             counter[chat_id] = {}
             try:
@@ -300,14 +405,25 @@ class Call:
                     autoend[chat_id] = datetime.now() + timedelta(minutes=1)
             except: pass
 
-    # ---------------------------------------------------
-    # 🎵 وحدة التشغيل الرئيسية (The Core Play Function)
-    # ---------------------------------------------------
+    # ---------------------------------------------------------
+    # 🎧 مشغل الوسائط المتكامل (The Core Player)
+    # ---------------------------------------------------------
     @capture_internal_err
     async def play(self, client, chat_id: int) -> None:
+        """
+        المحرك الرئيسي لتشغيل وإدارة قائمة الانتظار.
+        يتعامل مع جميع أنواع المصادر: Live, File, YouTube, SoundCloud, Telegram Audio/Video.
+        """
+        # التأكد من صحة العميل المرر (Client Validation)
+        if isinstance(client, Client): 
+             # إذا تم تمرير يوزربوت بدلاً من PyTgCalls، قم بتبديله
+             LOGGER(__name__).info(f"تصحيح نوع العميل للشات {chat_id}")
+             client = await self.get_call_engine(chat_id)
+
         check = db.get(chat_id)
         popped = None
         loop = await get_loop(chat_id)
+        
         try:
             if loop == 0:
                 popped = check.pop(0)
@@ -315,6 +431,7 @@ class Call:
                 loop = loop - 1
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
+            
             if not check:
                 await _clear_(chat_id)
                 if chat_id in self.active_calls:
@@ -330,6 +447,7 @@ class Call:
                 return await client.leave_call(chat_id)
             except: return
 
+        # استخراج بيانات المسار التالي
         queued = check[0]["file"]
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -340,7 +458,6 @@ class Call:
         videoid = check[0]["vidid"]
         db[chat_id][0]["played"] = 0
 
-        # استعادة بيانات السرعة
         exis = (check[0]).get("old_dur")
         if exis:
             db[chat_id][0]["dur"] = exis
@@ -350,7 +467,9 @@ class Call:
 
         video = True if str(streamtype) == "video" else False
 
-        # Live Stream
+        # --- معالجة أنواع الميديا المختلفة ---
+
+        # 1. بث مباشر (Live Stream)
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
@@ -358,8 +477,10 @@ class Call:
             stream = dynamic_media_stream(path=link, video=video)
             try:
                 await client.play(chat_id, stream)
-            except:
+            except Exception as e:
+                LOGGER(__name__).error(f"Live Play Error: {e}")
                 return await app.send_message(original_chat_id, text=_["call_6"])
+            
             img = await get_thumb(videoid)
             button = stream_markup(_, videoid, chat_id)
             run = await app.send_photo(
@@ -371,24 +492,27 @@ class Call:
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
 
-        # Downloaded Media
+        # 2. ملفات تم تحميلها (Downloaded Files)
         elif "vid_" in queued:
             mystic = await app.send_message(original_chat_id, _["call_7"])
             try:
-                # تكامل مع دالة التحميل الجديدة
                 file_path, _ = await YouTube.download(
                     videoid,
                     mystic,
                     videoid=True,
                     video=True if str(streamtype) == "video" else False,
                 )
-            except:
+            except Exception as e:
+                LOGGER(__name__).error(f"Download Error: {e}")
                 return await mystic.edit_text(_["call_6"], disable_web_page_preview=True)
+            
             stream = dynamic_media_stream(path=file_path, video=video)
             try:
                 await client.play(chat_id, stream)
-            except:
+            except Exception as e:
+                LOGGER(__name__).error(f"Play File Error: {e}")
                 return await app.send_message(original_chat_id, text=_["call_6"])
+            
             img = await get_thumb(videoid)
             button = stream_markup(_, videoid, chat_id)
             await mystic.delete()
@@ -401,12 +525,13 @@ class Call:
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "stream"
 
-        # Other Files
+        # 3. مصادر أخرى (Telegram / SoundCloud / Index)
         else:
             stream = dynamic_media_stream(path=queued, video=video)
             try:
                 await client.play(chat_id, stream)
-            except:
+            except Exception as e:
+                LOGGER(__name__).error(f"Other Source Play Error: {e}")
                 return await app.send_message(original_chat_id, text=_["call_6"])
             
             if videoid == "telegram":
@@ -437,17 +562,20 @@ class Call:
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
 
-    # ---------------------------------------------------
-    # 🔄 تهيئة وإدارة المساعدين
-    # ---------------------------------------------------
+    # ---------------------------------------------------------
+    # 📡 التشغيل والمراقبة (Startup & Monitoring)
+    # ---------------------------------------------------------
     async def start(self) -> None:
-        LOGGER(__name__).info("Starting PyTgCalls Clients...")
+        LOGGER(__name__).info("جاري تشغيل عملاء PyTgCalls...")
         clients = [self.one, self.two, self.three, self.four, self.five]
-        for cli in clients:
-            if cli: await cli.start()
+        for i, cli in enumerate(clients, 1):
+            if cli: 
+                await cli.start()
+                LOGGER(__name__).info(f"تم تشغيل المساعد رقم {i} بنجاح.")
 
     @capture_internal_err
     async def ping(self) -> str:
+        """قياس زمن الاستجابة لجميع المساعدين"""
         pings = []
         clients = [self.one, self.two, self.three, self.four, self.five]
         for cli in clients:
@@ -457,21 +585,28 @@ class Call:
 
     @capture_internal_err
     async def decorators(self) -> None:
+        """إعداد معالجات الأحداث (Event Handlers) لجميع المساعدين"""
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update) -> None:
+            # 1. عند انتهاء البث (تشغيل التالي)
             if isinstance(update, StreamEnded):
                 if update.stream_type == StreamEnded.Type.AUDIO:
-                    assistant = await group_assistant(self, update.chat_id)
+                    LOGGER(__name__).info(f"انتهاء البث في {update.chat_id}، تشغيل التالي...")
+                    # استخدام get_call_engine لضمان الكلاينت الصحيح دائماً
+                    assistant = await self.get_call_engine(update.chat_id)
                     await self.play(assistant, update.chat_id)
             
+            # 2. تحديثات حالة المكالمة (طرد/خروج)
             elif isinstance(update, ChatUpdate):
                 status = update.status
-                # التعامل مع الخروج الاجباري او التوقف
                 if status in [ChatUpdate.Status.KICKED, ChatUpdate.Status.LEFT_GROUP, ChatUpdate.Status.CLOSED_VOICE_CHAT]:
+                    LOGGER(__name__).warning(f"توقف قسري للمكالمة في {update.chat_id} (Status: {status})")
                     await self.stop_stream(update.chat_id)
 
+        # ربط المعالج الموحد بجميع المساعدين
         for assistant in assistants:
             assistant.on_update()(unified_update_handler)
 
+# تهيئة الكائن الرئيسي
 Hotty = Call()
