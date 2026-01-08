@@ -1,23 +1,43 @@
 import asyncio
 import os
 import re
-from typing import Union
+import logging
+import aiohttp
 import yt_dlp
+from typing import Union, Optional, Tuple
+
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from youtubesearchpython.__future__ import VideosSearch
 from BrandrdXMusic.utils.formatters import time_to_seconds
-import aiohttp
 from BrandrdXMusic import LOGGER
 
-# تعريف متغيرات الـ API
+# =======================================================================
+# 🔧 المعالج الذكي (Smart Handler) لإصلاح أخطاء الاتصال والمكتبات
+# وظيفته: إجبار المكتبات على التعرف على Chat ID لتفادي الـ Crash
+# =======================================================================
+try:
+    from pytgcalls.types import Update
+    # محاولة إضافة خاصية chat_id يدوياً لو كانت ناقصة
+    if not hasattr(Update, "chat_id"):
+        @property
+        def chat_id_patch(self):
+            return self.chat.id if hasattr(self, "chat") else getattr(self, "chat_id", None)
+        setattr(Update, "chat_id", chat_id_patch)
+except ImportError:
+    pass
+except Exception as e:
+    logging.error(f"Failed to patch Update object: {e}")
+
+# =======================================================================
+# 🌐 إعدادات API التحميل (Fallbacks)
+# =======================================================================
 YOUR_API_URL = None
 FALLBACK_API_URL = "https://shrutibots.site"
 
 async def load_api_url():
     global YOUR_API_URL
     logger = LOGGER("BrandrdXMusic.platforms.Youtube.py")
-    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get("https://pastebin.com/raw/rLsBhAQa", timeout=aiohttp.ClientTimeout(total=10)) as response:
@@ -30,9 +50,9 @@ async def load_api_url():
                     logger.info("Using fallback API URL")
     except Exception:
         YOUR_API_URL = FALLBACK_API_URL
-        logger.info("Using fallback API URL")
+        logger.info("Using fallback API URL (Error in loading)")
 
-# تشغيل الـ Loop للتحميل المبدئي
+# تشغيل الـ Loop مرة واحدة عند البدء
 try:
     loop = asyncio.get_event_loop()
     if loop.is_running():
@@ -42,11 +62,14 @@ try:
 except RuntimeError:
     pass
 
+# =======================================================================
+# 📥 دوال التحميل (Download Functions)
+# =======================================================================
+
 async def download_song(link: str) -> str:
     global YOUR_API_URL
     if not YOUR_API_URL:
         await load_api_url()
-        if not YOUR_API_URL: YOUR_API_URL = FALLBACK_API_URL
     
     video_id = link.split('v=')[-1].split('&')[0] if 'v=' in link else link
     if not video_id or len(video_id) < 3: return None
@@ -68,26 +91,24 @@ async def download_song(link: str) -> str:
                 
                 stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=audio&token={download_token}"
                 async with session.get(stream_url, timeout=aiohttp.ClientTimeout(total=300)) as file_response:
-                    if file_response.status == 302:
-                        redirect_url = file_response.headers.get('Location')
-                        if redirect_url:
-                            async with session.get(redirect_url) as final_response:
-                                if final_response.status != 200: return None
-                                with open(file_path, "wb") as f:
-                                    async for chunk in final_response.content.iter_chunked(16384): f.write(chunk)
-                                return file_path
-                    elif file_response.status == 200:
-                        with open(file_path, "wb") as f:
-                            async for chunk in file_response.content.iter_chunked(16384): f.write(chunk)
-                        return file_path
-                    else: return None
-    except Exception: return None
+                    if file_response.status in [200, 302]:
+                        redirect_url = file_response.headers.get('Location') if file_response.status == 302 else None
+                        target_url = redirect_url if redirect_url else stream_url
+                        
+                        async with session.get(target_url) as final_response:
+                            if final_response.status != 200: return None
+                            with open(file_path, "wb") as f:
+                                async for chunk in final_response.content.iter_chunked(16384):
+                                    f.write(chunk)
+                            return file_path
+                    return None
+    except Exception:
+        return None
 
 async def download_video(link: str) -> str:
     global YOUR_API_URL
     if not YOUR_API_URL:
         await load_api_url()
-        if not YOUR_API_URL: YOUR_API_URL = FALLBACK_API_URL
     
     video_id = link.split('v=')[-1].split('&')[0] if 'v=' in link else link
     if not video_id or len(video_id) < 3: return None
@@ -109,20 +130,19 @@ async def download_video(link: str) -> str:
                 
                 stream_url = f"{YOUR_API_URL}/stream/{video_id}?type=video&token={download_token}"
                 async with session.get(stream_url, timeout=aiohttp.ClientTimeout(total=600)) as file_response:
-                    if file_response.status == 302:
-                        redirect_url = file_response.headers.get('Location')
-                        if redirect_url:
-                            async with session.get(redirect_url) as final_response:
-                                if final_response.status != 200: return None
-                                with open(file_path, "wb") as f:
-                                    async for chunk in final_response.content.iter_chunked(16384): f.write(chunk)
-                                return file_path
-                    elif file_response.status == 200:
-                        with open(file_path, "wb") as f:
-                            async for chunk in file_response.content.iter_chunked(16384): f.write(chunk)
-                        return file_path
-                    else: return None
-    except Exception: return None
+                    if file_response.status in [200, 302]:
+                        redirect_url = file_response.headers.get('Location') if file_response.status == 302 else None
+                        target_url = redirect_url if redirect_url else stream_url
+                        
+                        async with session.get(target_url) as final_response:
+                            if final_response.status != 200: return None
+                            with open(file_path, "wb") as f:
+                                async for chunk in final_response.content.iter_chunked(16384):
+                                    f.write(chunk)
+                            return file_path
+                    return None
+    except Exception:
+        return None
 
 async def shell_cmd(cmd):
     proc = await asyncio.create_subprocess_shell(
@@ -137,6 +157,10 @@ async def shell_cmd(cmd):
         else:
             return errorz.decode("utf-8")
     return out.decode("utf-8")
+
+# =======================================================================
+# 🧠 كلاس اليوتيوب الأساسي (YouTube API)
+# =======================================================================
 
 class YouTubeAPI:
     def __init__(self):
@@ -179,8 +203,9 @@ class YouTubeAPI:
                 duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
                 return title, duration_min, duration_sec, thumbnail, vidid
         except Exception as e:
-            # هنا التعديل: إثارة خطأ بدل إرجاع None عشان البوت ميعملش كراش
-            raise ValueError(f"Details fetch failed: {e}")
+            # معالج ذكي للخطأ: بدل الكراش يرجع قيم افتراضية أو يرفع خطأ بسيط
+            LOGGER(__name__).warning(f"Details fetch failed: {e}")
+            return None
 
     async def title(self, link: str, videoid: Union[bool, str] = None):
         if videoid: link = self.base + link
@@ -251,8 +276,8 @@ class YouTubeAPI:
                 }
                 return track_details, vidid
         except Exception as e:
-            # هنا التعديل المهم جداً
-            raise ValueError(f"Track fetch failed: {e}")
+            LOGGER(__name__).error(f"Track fetch error: {e}")
+            return None, None
 
     async def formats(self, link: str, videoid: Union[bool, str] = None):
         if videoid: link = self.base + link
@@ -287,7 +312,6 @@ class YouTubeAPI:
             a = VideosSearch(link, limit=10)
             result = (await a.next()).get("result")
             if not result or len(result) <= query_type:
-                 # تعديل كمان هنا
                  raise ValueError("Slider index out of range")
             title = result[query_type]["title"]
             duration_min = result[query_type]["duration"]
@@ -295,7 +319,8 @@ class YouTubeAPI:
             thumbnail = result[query_type]["thumbnails"][0]["url"].split("?")[0]
             return title, duration_min, thumbnail, vidid
         except Exception as e:
-            raise ValueError(f"Slider fetch failed: {e}")
+             LOGGER(__name__).warning(f"Slider fetch error: {e}")
+             return None
 
     async def download(
         self,
