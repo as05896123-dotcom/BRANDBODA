@@ -7,7 +7,7 @@
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
 
 [النظام: وحدة التحكم - Zero Latency + Concurrency]
-[التقنية: uvloop + asyncio.gather + FFmpeg Ultrafast]
+[التقنية: asyncio.gather + FFmpeg Ultrafast + Non-blocking UI]
 """
 
 import asyncio
@@ -15,13 +15,6 @@ import os
 from datetime import datetime, timedelta
 from typing import Union
 from functools import wraps
-
-# ⚡ محاولة تفعيل uvloop لتسريع النواة 4 أضعاف
-try:
-    import uvloop
-    uvloop.install()
-except ImportError:
-    pass
 
 from pyrogram import Client
 from pyrogram.errors import FloodWait, ChatAdminRequired
