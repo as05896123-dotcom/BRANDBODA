@@ -1,11 +1,9 @@
 import sys
 import traceback
 from functools import wraps
-
 from pyrogram.errors.exceptions.forbidden_403 import ChatWriteForbidden
 from BrandrdXMusic import app
 from BrandrdXMusic.logging import LOGGER
-
 
 def split_limits(text):
     if len(text) < 2048:
@@ -22,9 +20,7 @@ def split_limits(text):
             small_msg = line
 
     result.append(small_msg)
-
     return result
-
 
 def capture_err(func):
     @wraps(func)
@@ -32,7 +28,10 @@ def capture_err(func):
         try:
             return await func(client, message, *args, **kwargs)
         except ChatWriteForbidden:
-            await app.leave_chat(message.chat.id)
+            try:
+                await app.leave_chat(message.chat.id)
+            except:
+                pass
             return
         except Exception as err:
             exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -52,5 +51,35 @@ def capture_err(func):
             for x in error_feedback:
                 await app.send_message(LOGGER, x)
             raise err
-
     return capture
+
+# --- هذه هي الدالة التي كانت ناقصة وتسبب الخطأ ---
+def capture_internal_err(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as err:
+            # طباعة الخطأ في التيرمنال للمتابعة
+            traceback.print_exc()
+            
+            # محاولة إرسال الخطأ لجروب السجل (LOGGER)
+            try:
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                errors = traceback.format_exception(
+                    etype=exc_type,
+                    value=exc_obj,
+                    tb=exc_tb,
+                )
+                error_feedback = split_limits(
+                    "**INTERNAL ERROR** | `{}`\n\n```{}```\n".format(
+                        func.__name__,
+                        "".join(errors),
+                    ),
+                )
+                for x in error_feedback:
+                    await app.send_message(LOGGER, x)
+            except:
+                pass
+            return None
+    return wrapper
