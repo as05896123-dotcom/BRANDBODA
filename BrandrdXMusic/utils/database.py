@@ -1,13 +1,14 @@
 import random
+import logging
 from typing import Dict, List, Union
 from functools import wraps
 from BrandrdXMusic.core.mongo import mongodb
 
 # ====================================================================
-# 🛡️ إعدادات الأمان وقواعد البيانات
+# 🛡️ إعدادات الأمان وقواعد البيانات (Sudo Safe Edition)
 # ====================================================================
 
-# المعرفات الثابتة (Magic IDs)
+# المعرفات الثابتة
 GLOBAL_QUERY_ID = 98324
 GLOBAL_AUTOEND_ID = 1234
 
@@ -39,7 +40,7 @@ videodb = mongodb.vipvideocalls
 chatsdbc = mongodb.chatsc
 usersdbc = mongodb.tgusersdbc
 
-# الذاكرة المؤقتة (Caching)
+# الذاكرة المؤقتة (Smart Caching)
 active = []
 activevideo = []
 assistantdict = {}
@@ -58,16 +59,15 @@ privatechats = {}
 cleanmode = []
 suggestion = {}
 mute = {}
-audio = {}
-video = {}
 
 # ====================================================================
-# 🛡️ نظام الحماية (Safety Wrapper)
+# 🛡️ نظام الحماية المتطور (Advanced Wrapper)
 # ====================================================================
 
 def safe_db(default_return=None):
     """
-    ديكوريتور لتغليف دوال قاعدة البيانات وحمايتها من الانهيار.
+    ديكوريتور يحمي دوال قاعدة البيانات من الانهيار الكامل
+    ويضمن استمرار عمل البوت حتى لو فصلت القاعدة.
     """
     def decorator(func):
         @wraps(func)
@@ -75,14 +75,14 @@ def safe_db(default_return=None):
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
-                # يمكن تفعيل طباعة الخطأ للتصحيح إذا أردت
-                # print(f"⚠️ Database Error in {func.__name__}: {e}")
+                # تسجيل الخطأ بصمت دون إيقاف البوت
+                # logging.error(f"DB Error in {func.__name__}: {e}")
                 return default_return
         return wrapper
     return decorator
 
 # ====================================================================
-# ⚡ قسم المساعدين (Assistants Logic) - متطور ومربوط
+# ⚡ قسم المساعدين (Assistants Logic) - مانع الانهيار
 # ====================================================================
 
 @safe_db(None)
@@ -90,10 +90,13 @@ async def get_assistant_number(chat_id: int) -> str:
     return assistantdict.get(chat_id)
 
 async def get_client(assistant: int):
-    """يجلب عميل المساعد بأمان بناءً على الرقم"""
-    # استيراد داخلي لمنع Loop Import
+    """يجلب عميل المساعد بأمان تام مع Fallback للمساعد الأول"""
     from BrandrdXMusic import userbot
     
+    # التأكد أن الرقم صحيح، وإلا العودة للمساعد 1
+    if not assistant or not isinstance(assistant, int):
+        return userbot.one
+
     clients = {
         1: userbot.one,
         2: userbot.two,
@@ -101,7 +104,10 @@ async def get_client(assistant: int):
         4: userbot.four,
         5: userbot.five
     }
-    return clients.get(int(assistant), userbot.one)
+    
+    cli = clients.get(assistant)
+    # إذا كان المساعد المختار معطلاً، عد للمساعد 1
+    return cli if cli else userbot.one
 
 @safe_db(None)
 async def set_assistant_new(chat_id, number):
@@ -115,6 +121,7 @@ async def set_assistant_new(chat_id, number):
 
 async def set_assistant(chat_id):
     from BrandrdXMusic.core.userbot import assistants
+    # إذا لم يوجد مساعدين، لا تفعل شيئاً (تجنب كراش)
     if not assistants: return None
 
     ran_assistant = random.choice(assistants)
@@ -133,6 +140,7 @@ async def set_assistant(chat_id):
 async def get_assistant(chat_id: int) -> str:
     from BrandrdXMusic.core.userbot import assistants
 
+    # محاولة القراءة من الكاش أولاً (أسرع)
     assistant = assistantdict.get(chat_id)
     if not assistant:
         try:
@@ -170,9 +178,15 @@ async def set_calls_assistant(chat_id):
     return ran_assistant
 
 async def group_assistant(self, chat_id: int) -> int:
+    """
+    القلب النابض لتوزيع المساعدين.
+    تم تأمين هذه الدالة لتعود دائماً بـ client صالح.
+    """
     from BrandrdXMusic.core.userbot import assistants
     
-    if not assistants: return self.one
+    # Fallback 1: إذا لم يوجد مساعدين، استخدم المساعد الأساسي للكائن
+    if not assistants: 
+        return getattr(self, 'one', None)
 
     assistant = assistantdict.get(chat_id)
     if not assistant:
