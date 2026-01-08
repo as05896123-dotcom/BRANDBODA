@@ -32,7 +32,8 @@ async def start_pm(client, message: Message, _):
         name = message.text.split(None, 1)[1]
         if name[0:4] == "help":
             keyboard = help_pannel(_)
-            await message.reply_sticker("CAACAgUAAxkBAAEQI1RlTLnRAy4h9lOS6jgS5FYsQoruOAAC1gMAAg6ryVcldUr_lhPexzME")
+            # الاستيكر الجديد
+            await message.reply_sticker("CAACAgUAAyEFAATXFFgrAAIDymlfzq3ZMbEh_bgdkjEhg2QMBib-AAILFQAC-vEZVMBmWHCQ-sJuHgQ")
             return await message.reply_photo(
                 photo=config.START_IMG_URL,
                 caption=_["help_1"].format(config.SUPPORT_CHAT),
@@ -87,50 +88,65 @@ async def start_pm(client, message: Message, _):
 
         try:
             out = private_panel(_)
-            lol = await message.reply_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ︎ {}.. ❣️".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 🥳".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💥".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 🤩".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💌".format(message.from_user.mention))
-            await lol.edit_text("𝐖𝐞𝐥𝐜𝐨𝐦𝐞 𝐁𝐚𝐛𝐲 ꨄ {}.. 💞".format(message.from_user.mention))
+            
+            # --- الترحيب (نفس الرد مع تغيير الايموجي) ---
+            lol = await message.reply_text("نــورت يـا غــالـي ꨄ︎ {}.. 🤍".format(message.from_user.mention))
+            await asyncio.sleep(0.1)
+            await lol.edit_text("نــورت يـا غــالـي ꨄ︎ {}.. ☔".format(message.from_user.mention))
+            await asyncio.sleep(0.1)
+            await lol.edit_text("نــورت يـا غــالـي ꨄ︎ {}.. 🧚".format(message.from_user.mention))
+            await asyncio.sleep(0.1)
+            await lol.edit_text("نــورت يـا غــالـي ꨄ︎ {}.. 💞".format(message.from_user.mention))
+            await asyncio.sleep(0.1)
+            await lol.edit_text("نــورت يـا غــالـي ꨄ︎ {}.. 💕".format(message.from_user.mention))
+            await asyncio.sleep(0.1)
+            await lol.edit_text("نــورت يـا غــالـي ꨄ︎ {}.. 💜".format(message.from_user.mention))
                
             await lol.delete()
-            lols = await message.reply_text("**⚡️ѕ**")
+            
+            # --- جاري التشغيل (بالقلب الأبيض) ---
+            lols = await message.reply_text("🤍 جـ")
             await asyncio.sleep(0.1)
-            await lols.edit_text("⚡ѕт")        
+            await lols.edit_text("🤍 جــ")        
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтα**")
+            await lols.edit_text("🤍 جــا")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαя**")
+            await lols.edit_text("🤍 جــار")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαят**")
+            await lols.edit_text("🤍 جــاري")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятι**")
+            await lols.edit_text("🤍 جــاري الـ")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιи**")
+            await lols.edit_text("🤍 جــاري التـ")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιиg**")
+            await lols.edit_text("🤍 جــاري التشـ")
             await asyncio.sleep(0.1)
-            await lols.edit_text("**⚡ѕтαятιиg.**")
+            await lols.edit_text("🤍 جــاري التشغيـ")
+            await asyncio.sleep(0.1)
+            await lols.edit_text("🤍 جــاري التشغيل")
+            await asyncio.sleep(0.1)
+            await lols.edit_text("🤍 جــاري التشغيل .")
+            await asyncio.sleep(0.1)
+            await lols.edit_text("🤍 جــاري التشغيل . .")
+            await asyncio.sleep(0.1)
+            await lols.edit_text("🤍 جــاري التشغيل . . .")
 
-            await lols.edit_text("**⚡ѕтαятιиg....**")
-
-            await lols.edit_text("**⚡ѕтαятιиg.**")
-            await lols.edit_text("**⚡ѕтαятιиg....**")
-            m = await message.reply_sticker("CAACAgUAAxkBAAEQI1BlTLmx7PtOO3aPNshEU2gCy7iAFgACNQUAApqMuVeA6eJ50VbvmDME")
+            # --- الاستيكر الجديد ---
+            m = await message.reply_sticker("CAACAgUAAyEFAATXFFgrAAIDymlfzq3ZMbEh_bgdkjEhg2QMBib-AAILFQAC-vEZVMBmWHCQ-sJuHgQ")
+            
+            # --- إصلاح مشكلة الصورة ---
             if message.chat.photo:
-
-                userss_photo = await app.download_media(
-                    message.chat.photo.big_file_id,
-                )
+                try:
+                    chat_photo = await app.download_media(message.chat.photo.big_file_id)
+                except:
+                    chat_photo = config.START_IMG_URL
             else:
-                userss_photo = "assets/nodp.png"
-            if userss_photo:
-                chat_photo = userss_photo
-            chat_photo = userss_photo if userss_photo else START_IMG_URL
+                chat_photo = config.START_IMG_URL
+            # -----------------------------------
 
-        except AttributeError:
-            chat_photo = "assets/nodp.png"
+        except Exception:
+            chat_photo = config.START_IMG_URL
+        
         await lols.delete()
         await m.delete()
         await message.reply_photo(
@@ -200,4 +216,3 @@ async def welcome(client, message: Message):
                 await message.stop_propagation()
         except Exception as ex:
             print(ex)
-
