@@ -39,7 +39,7 @@ async def stream(
     if not result:
         return
     
-    # تحويل video لقيمة بوليان (True/False) عشان الكود الجديد يفهمها صح
+    # تحويل video لقيمة بوليان بأمان
     is_video = True if video else False
     
     if forceplay:
@@ -115,6 +115,11 @@ async def stream(
                 
                 img = await gen_thumb(vidid, user_id)
                 button = stream_markup(_, vidid, chat_id)
+                
+                # حذف رسالة الانتظار
+                try: await mystic.delete()
+                except: pass
+
                 run = await app.send_photo(
                     original_chat_id,
                     photo=img,
@@ -126,9 +131,12 @@ async def stream(
                     ),
                     reply_markup=InlineKeyboardMarkup(button),
                 )
+                
+                try:
+                    db[chat_id][0]["mystic"] = run
+                    db[chat_id][0]["markup"] = "stream"
+                except: pass
 
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "stream"
         if count == 0:
             return
         else:
@@ -213,6 +221,11 @@ async def stream(
             
             img = await gen_thumb(vidid, user_id)
             button = stream_markup(_, vidid, chat_id)
+            
+            # حذف رسالة الانتظار
+            try: await mystic.delete()
+            except: pass
+
             run = await app.send_photo(
                 original_chat_id,
                 photo=img,
@@ -225,8 +238,10 @@ async def stream(
                 reply_markup=InlineKeyboardMarkup(button),
             )
 
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "stream"
+            try:
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "stream"
+            except: pass
 
     # --- ساوند كلاود (SoundCloud) ---
     elif streamtype == "soundcloud":
@@ -269,7 +284,12 @@ async def stream(
                 "audio",
                 forceplay=forceplay,
             )
-            button = stream_markup(_, chat_id)
+            # تم التوحيد لتفادي الأخطاء
+            button = stream_markup(_, "None", chat_id)
+            
+            try: await mystic.delete()
+            except: pass
+
             run = await app.send_photo(
                 original_chat_id,
                 photo=config.SOUNCLOUD_IMG_URL,
@@ -278,8 +298,10 @@ async def stream(
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
+            try:
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            except: pass
 
     # --- تيليجرام (Telegram Files) ---
     elif streamtype == "telegram":
@@ -325,15 +347,23 @@ async def stream(
             )
             if is_video:
                 await add_active_video_chat(chat_id)
-            button = stream_markup(_, chat_id)
+            
+            # تم التوحيد
+            button = stream_markup(_, "None", chat_id)
+            
+            try: await mystic.delete()
+            except: pass
+
             run = await app.send_photo(
                 original_chat_id,
                 photo=config.TELEGRAM_VIDEO_URL if is_video else config.TELEGRAM_AUDIO_URL,
                 caption=_["stream_1"].format(link, title[:23], duration_min, user_name),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
+            try:
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            except: pass
 
     # --- بث مباشر (Live) ---
     elif streamtype == "live":
@@ -390,7 +420,11 @@ async def stream(
             )
             
             img = await gen_thumb(vidid, user_id)
-            button = stream_markup(_, chat_id)
+            button = stream_markup(_, vidid, chat_id)
+            
+            try: await mystic.delete()
+            except: pass
+
             run = await app.send_photo(
                 original_chat_id,
                 photo=img,
@@ -402,8 +436,10 @@ async def stream(
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
+            try:
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            except: pass
 
     # --- روابط خارجية (Index/M3u8) ---
     elif streamtype == "index":
@@ -448,13 +484,18 @@ async def stream(
                 "video" if is_video else "audio",
                 forceplay=forceplay,
             )
-            button = stream_markup(_, chat_id)
+            button = stream_markup(_, "None", chat_id)
+            
+            try: await mystic.delete()
+            except: pass
+
             run = await app.send_photo(
                 original_chat_id,
                 photo=config.STREAM_IMG_URL,
                 caption=_["stream_2"].format(user_name),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
-            await mystic.delete()
+            try:
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            except: pass
