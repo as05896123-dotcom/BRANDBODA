@@ -32,7 +32,8 @@ from BrandrdXMusic.utils.database import (
 )
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.formatters import check_duration, seconds_to_min, speed_converter
-from BrandrdXMusic.utils.inline.play import stream_markup, stream_markup2
+# التعديل هنا: شيلنا stream_markup2 عشان مش موجودة في ملفاتك القديمة
+from BrandrdXMusic.utils.inline.play import stream_markup
 from BrandrdXMusic.utils.stream.autoclear import auto_clean
 from BrandrdXMusic.utils.thumbnails import get_thumb
 
@@ -338,10 +339,12 @@ class Call(PyTgCalls):
                     return await app.send_message(original_chat_id, text=_["call_6"])
 
                 img = await get_thumb(videoid)
-                # استخدام دالة الأزرار المناسبة حسب التوفر في السورس القديم
+                # هنا التعديل: المحاولة داخل الكود مش في الاستيراد
                 try:
+                    # هنحاول نستخدم الدالة الجديدة لو موجودة (لو حد ضافها مستقبلاً)
                     button = stream_markup2(_, chat_id)
                 except NameError:
+                    # لو مش موجودة، هنستخدم القديمة بتاعة سورس BrandrdX
                     button = stream_markup(_, videoid, chat_id)
                 
                 run = await app.send_photo(
