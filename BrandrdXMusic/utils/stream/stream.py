@@ -1,26 +1,17 @@
 import os
 from random import randint
 from typing import Union
-import random
-import string
-import asyncio
-from pyrogram import client, filters
-from pyrogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
-from pytgcalls.exceptions import NoActiveGroupCall
+
+from pyrogram.types import InlineKeyboardMarkup
+
 import config
-from BrandrdXMusic import Carbon, YouTube, app, Apple, Resso, SoundCloud, Spotify, Telegram
+from BrandrdXMusic import Carbon, YouTube, app
 from BrandrdXMusic.core.call import Hotty
-from BrandrdXMusic.misc import db, SUDOERS
+from BrandrdXMusic.misc import db
 from BrandrdXMusic.utils.database import (
     add_active_video_chat,
     is_active_chat,
-    add_served_chat,
-    add_served_user,
-    blacklisted_chats,
-    get_lang,
-    is_banned_user,
-    is_on_off,
-    get_assistant
+    add_active_chat,
 )
 from BrandrdXMusic.utils.exceptions import AssistantErr
 from BrandrdXMusic.utils.inline import (
@@ -30,17 +21,6 @@ from BrandrdXMusic.utils.inline import (
 )
 from BrandrdXMusic.utils.pastebin import HottyBin
 from BrandrdXMusic.utils.stream.queue import put_queue, put_queue_index
-from youtubesearchpython.__future__ import VideosSearch
-from BrandrdXMusic.utils import seconds_to_min, time_to_seconds
-from BrandrdXMusic.utils.channelplay import get_channeplayCB
-from BrandrdXMusic.utils.decorators.language import languageCB
-from BrandrdXMusic.utils.decorators.play import PlayWrapper
-from BrandrdXMusic.utils.formatters import formats
-from BrandrdXMusic.utils.logger import play_logs
-from BrandrdXMusic.utils.extraction import extract_user
-from config import BANNED_USERS, lyrical
-
-# --- استدعاء دالة التصميم الجديدة (بدون مشاكل) ---
 from BrandrdXMusic.utils.thumbnails import gen_thumb
 
 async def stream(
@@ -58,6 +38,10 @@ async def stream(
 ):
     if not result:
         return
+    
+    # تحويل video لقيمة بوليان (True/False) عشان الكود الجديد يفهمها صح
+    is_video = True if video else False
+    
     if forceplay:
         await Hotty.force_stop_stream(chat_id)
         
@@ -92,7 +76,7 @@ async def stream(
                     user_name,
                     vidid,
                     user_id,
-                    "video" if video else "audio",
+                    "video" if is_video else "audio",
                 )
                 position = len(db.get(chat_id)) - 1
                 count += 1
@@ -101,18 +85,19 @@ async def stream(
             else:
                 if not forceplay:
                     db[chat_id] = []
-                status = True if video else None
                 try:
                     file_path, direct = await YouTube.download(
-                        vidid, mystic, video=status, videoid=True
+                        vidid, mystic, video=is_video, videoid=True
                     )
                 except:
                     await mystic.edit_text(_["play_3"])
+                    return
+                
                 await Hotty.join_call(
                     chat_id,
                     original_chat_id,
                     file_path,
-                    video=status,
+                    video=is_video,
                     image=thumbnail,
                 )
                 await put_queue(
@@ -124,13 +109,11 @@ async def stream(
                     user_name,
                     vidid,
                     user_id,
-                    "video" if video else "audio",
+                    "video" if is_video else "audio",
                     forceplay=forceplay,
                 )
                 
-                # [تصحيح] إزالة theme لأنه غير موجود في الدالة الأصلية
                 img = await gen_thumb(vidid, user_id)
-                
                 button = stream_markup(_, vidid, chat_id)
                 run = await app.send_photo(
                     original_chat_id,
@@ -171,13 +154,15 @@ async def stream(
         title = (result["title"]).title()
         duration_min = result["duration_min"]
         thumbnail = result["thumb"]
-        status = True if video else None
+        
         try:
             file_path, direct = await YouTube.download(
-                vidid, mystic, videoid=True, video=status
+                vidid, mystic, videoid=True, video=is_video
             )
         except:
             await mystic.edit_text(_["play_3"])
+            return
+
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -188,12 +173,10 @@ async def stream(
                 user_name,
                 vidid,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
             )
             
-            # [تصحيح] إزالة theme
             img = await gen_thumb(vidid, user_id)
-            
             position = len(db.get(chat_id)) - 1
             button = aq_markup(_, chat_id)
             await app.send_photo(
@@ -207,11 +190,12 @@ async def stream(
         else:
             if not forceplay:
                 db[chat_id] = []
+            
             await Hotty.join_call(
                 chat_id,
                 original_chat_id,
                 file_path,
-                video=status,
+                video=is_video,
                 image=thumbnail,
             )
             await put_queue(
@@ -223,13 +207,11 @@ async def stream(
                 user_name,
                 vidid,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
                 forceplay=forceplay,
             )
             
-            # [تصحيح] إزالة theme
             img = await gen_thumb(vidid, user_id)
-            
             button = stream_markup(_, vidid, chat_id)
             run = await app.send_photo(
                 original_chat_id,
@@ -251,6 +233,7 @@ async def stream(
         file_path = result["filepath"]
         title = result["title"]
         duration_min = result["duration_min"]
+        
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -273,7 +256,7 @@ async def stream(
         else:
             if not forceplay:
                 db[chat_id] = []
-            await Hotty.join_call(chat_id, original_chat_id, file_path, video=None)
+            await Hotty.join_call(chat_id, original_chat_id, file_path, video=False)
             await put_queue(
                 chat_id,
                 original_chat_id,
@@ -304,7 +287,7 @@ async def stream(
         link = result["link"]
         title = (result["title"]).title()
         duration_min = result["dur"]
-        status = True if video else None
+        
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -315,7 +298,7 @@ async def stream(
                 user_name,
                 streamtype,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
             )
             position = len(db.get(chat_id)) - 1
             button = aq_markup(_, chat_id)
@@ -327,7 +310,7 @@ async def stream(
         else:
             if not forceplay:
                 db[chat_id] = []
-            await Hotty.join_call(chat_id, original_chat_id, file_path, video=status)
+            await Hotty.join_call(chat_id, original_chat_id, file_path, video=is_video)
             await put_queue(
                 chat_id,
                 original_chat_id,
@@ -337,15 +320,15 @@ async def stream(
                 user_name,
                 streamtype,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
                 forceplay=forceplay,
             )
-            if video:
+            if is_video:
                 await add_active_video_chat(chat_id)
             button = stream_markup(_, chat_id)
             run = await app.send_photo(
                 original_chat_id,
-                photo=config.TELEGRAM_VIDEO_URL if video else config.TELEGRAM_AUDIO_URL,
+                photo=config.TELEGRAM_VIDEO_URL if is_video else config.TELEGRAM_AUDIO_URL,
                 caption=_["stream_1"].format(link, title[:23], duration_min, user_name),
                 reply_markup=InlineKeyboardMarkup(button),
             )
@@ -359,7 +342,7 @@ async def stream(
         title = (result["title"]).title()
         thumbnail = result["thumb"]
         duration_min = "Live Track"
-        status = True if video else None
+        
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -370,7 +353,7 @@ async def stream(
                 user_name,
                 vidid,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
             )
             position = len(db.get(chat_id)) - 1
             button = aq_markup(_, chat_id)
@@ -385,11 +368,12 @@ async def stream(
             n, file_path = await YouTube.video(link)
             if n == 0:
                 raise AssistantErr(_["str_3"])
+            
             await Hotty.join_call(
                 chat_id,
                 original_chat_id,
                 file_path,
-                video=status,
+                video=is_video,
                 image=thumbnail if thumbnail else None,
             )
             await put_queue(
@@ -401,13 +385,11 @@ async def stream(
                 user_name,
                 vidid,
                 user_id,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
                 forceplay=forceplay,
             )
             
-            # [تصحيح] إزالة theme
             img = await gen_thumb(vidid, user_id)
-            
             button = stream_markup(_, chat_id)
             run = await app.send_photo(
                 original_chat_id,
@@ -428,6 +410,7 @@ async def stream(
         link = result
         title = "ɪɴᴅᴇx ᴏʀ ᴍ3ᴜ8 ʟɪɴᴋ"
         duration_min = "00:00"
+        
         if await is_active_chat(chat_id):
             await put_queue_index(
                 chat_id,
@@ -437,7 +420,7 @@ async def stream(
                 duration_min,
                 user_name,
                 link,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
             )
             position = len(db.get(chat_id)) - 1
             button = aq_markup(_, chat_id)
@@ -452,7 +435,7 @@ async def stream(
                 chat_id,
                 original_chat_id,
                 link,
-                video=True if video else None,
+                video=is_video,
             )
             await put_queue_index(
                 chat_id,
@@ -462,7 +445,7 @@ async def stream(
                 duration_min,
                 user_name,
                 link,
-                "video" if video else "audio",
+                "video" if is_video else "audio",
                 forceplay=forceplay,
             )
             button = stream_markup(_, chat_id)
