@@ -18,11 +18,7 @@ from pytgcalls.exceptions import (
 try:
     from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
-    try:
-        from ntgcalls import TelegramServerError, ConnectionNotFound
-    except:
-        TelegramServerError = Exception
-        ConnectionNotFound = Exception
+    from ntgcalls import TelegramServerError, ConnectionNotFound
 
 import config
 from strings import get_string
@@ -55,39 +51,30 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ BUILD STREAM (كودك + مانع التقطيع فقط)
+# ⚙️ SOUND FIX: استخدام OPUS (أفضل جودة وأنقى صوت)
 # =======================================================================
 
-def build_stream(path: str, video: bool = False, ffmpeg: str = "") -> MediaStream:
-    # 🛡️ الإضافة الوحيدة هنا هي إعدادات المخزن (Buffer) لمنع التقطيع
-    # حافظنا على كودك كما هو لأنه شغال معاك كويس
-    
-    base_flags = (
-        "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
-        "-max_muxing_queue_size 9999 "
-        "-preset ultrafast "
-        "-headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)' "
-    )
-    
-    final_flags = base_flags + (ffmpeg if ffmpeg else "")
+def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
+    # إلغاء إعدادات PCM القديمة واستخدام الإعدادات الافتراضية الذكية
+    # المكتبة هتقوم باختيار أفضل كوديك تلقائياً (Opus)
     
     if video:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,
+            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
-            ffmpeg_parameters=final_flags,
+            ffmpeg_parameters=ffmpeg,
         )
     else:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,
+            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
-            ffmpeg_parameters=final_flags,
+            ffmpeg_parameters=ffmpeg,
         )
 
 async def _clear_(chat_id: int) -> None:
@@ -136,12 +123,21 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Engine...")
+        LOGGER(__name__).info("🚀 Starting Studio Quality Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
             await asyncio.gather(*tasks)
         await self.decorators()
+
+    async def ping(self):
+        pings = []
+        clients = [self.one, self.two, self.three, self.four, self.five]
+        for c in clients:
+            if c:
+                try: pings.append(c.ping)
+                except: pass
+        return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
 
     async def pause_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
@@ -233,23 +229,14 @@ class Call:
                 return await client.leave_call(chat_id)
             except: return
         
-        # 🛡️ FIX KEYERROR: التأكد من وجود البيانات قبل قراءتها
-        if not check or not isinstance(check, list) or len(check) == 0:
-            return await self.stop_stream(chat_id)
-            
-        queued = check[0].get("file") # استخدام get بدلاً من القراءة المباشرة
-        videoid = check[0].get("vidid")
-        
-        if not queued or not videoid:
-            return await self.stop_stream(chat_id)
-
+        queued = check[0]["file"]
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         title = (check[0]["title"]).title()
         user = check[0]["by"]
         original_chat_id = check[0]["chat_id"]
         streamtype = check[0]["streamtype"]
-        
+        videoid = check[0]["vidid"]
         db[chat_id][0]["played"] = 0
 
         if check[0].get("old_dur"):
@@ -370,7 +357,6 @@ class Call:
 
     async def seek_stream(self, chat_id, file_path, to_seek, duration, mode):
         client = await self.get_tgcalls(chat_id)
-        # دمجنا أوامر التقديم مع إعدادات منع التقطيع
         ffmpeg = f"-ss {to_seek} -to {duration}"
         stream = build_stream(file_path, video=(mode == "video"), ffmpeg=ffmpeg)
         await client.play(chat_id, stream)
@@ -390,7 +376,6 @@ class Call:
 
         dur = int(await asyncio.get_event_loop().run_in_executor(None, check_duration, out))
         played, con_seconds = speed_converter(playing[0]["played"], speed)
-        
         ffmpeg = f"-ss {played} -to {seconds_to_min(dur)}"
         
         stream = build_stream(out, video=(playing[0]["streamtype"] == "video"), ffmpeg=ffmpeg)
@@ -412,7 +397,6 @@ class Call:
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update):
-            # 🛡️ FIX ATTRIBUTE ERROR: التأكد من وجود chat_id
             if not getattr(update, "chat_id", None):
                 return
             
