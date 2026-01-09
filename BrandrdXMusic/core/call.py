@@ -55,14 +55,12 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ BUILD STREAM (FIXED: ANTI-LAG + BUFFER)
+# ⚙️ BUILD STREAM (كودك + مانع التقطيع فقط)
 # =======================================================================
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = "") -> MediaStream:
-    # 🛡️ إعدادات منع التقطيع (Buffer & Reconnect)
-    # 1. reconnect: يعيد الاتصال لو الرابط فصل
-    # 2. max_muxing_queue_size: بيعمل مخزن مؤقت كبير عشان الصوت ميقطعش
-    # 3. ultrafast: بيقلل الضغط على المعالج
+    # 🛡️ الإضافة الوحيدة هنا هي إعدادات المخزن (Buffer) لمنع التقطيع
+    # حافظنا على كودك كما هو لأنه شغال معاك كويس
     
     base_flags = (
         "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
@@ -70,10 +68,9 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = "") -> MediaStrea
         "-preset ultrafast "
         "-headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)' "
     )
-
-    # دمج فلاتر التقديم/التسريع مع فلاتر منع التقطيع
+    
     final_flags = base_flags + (ffmpeg if ffmpeg else "")
-
+    
     if video:
         return MediaStream(
             media_path=path,
@@ -139,21 +136,12 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Studio Quality Engine...")
+        LOGGER(__name__).info("🚀 Starting Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
             await asyncio.gather(*tasks)
         await self.decorators()
-
-    async def ping(self):
-        pings = []
-        clients = [self.one, self.two, self.three, self.four, self.five]
-        for c in clients:
-            if c:
-                try: pings.append(c.ping)
-                except: pass
-        return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
 
     async def pause_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
@@ -198,7 +186,6 @@ class Call:
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         
-        # التأكد من عدم التقطيع باستخدام الـ Buffer المعدل
         stream = build_stream(link, video=bool(video))
 
         try:
@@ -210,12 +197,7 @@ class Call:
         except (TelegramServerError, ConnectionNotFound):
             raise AssistantErr(_["call_10"])
         except Exception as e:
-            # لو في مشكلة بسيطة، ننتظر ثانية ونعيد المحاولة
-            if "NoActiveGroupCall" in str(e):
-                 await asyncio.sleep(1)
-                 await client.play(chat_id, stream)
-            else:
-                 raise AssistantErr(f"{e}")
+            raise AssistantErr(f"{e}")
             
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
@@ -251,14 +233,23 @@ class Call:
                 return await client.leave_call(chat_id)
             except: return
         
-        queued = check[0]["file"]
+        # 🛡️ FIX KEYERROR: التأكد من وجود البيانات قبل قراءتها
+        if not check or not isinstance(check, list) or len(check) == 0:
+            return await self.stop_stream(chat_id)
+            
+        queued = check[0].get("file") # استخدام get بدلاً من القراءة المباشرة
+        videoid = check[0].get("vidid")
+        
+        if not queued or not videoid:
+            return await self.stop_stream(chat_id)
+
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         title = (check[0]["title"]).title()
         user = check[0]["by"]
         original_chat_id = check[0]["chat_id"]
         streamtype = check[0]["streamtype"]
-        videoid = check[0]["vidid"]
+        
         db[chat_id][0]["played"] = 0
 
         if check[0].get("old_dur"):
@@ -402,7 +393,6 @@ class Call:
         
         ffmpeg = f"-ss {played} -to {seconds_to_min(dur)}"
         
-        # استخدام ملف السرعة الجديد مع نفس إعدادات الثبات
         stream = build_stream(out, video=(playing[0]["streamtype"] == "video"), ffmpeg=ffmpeg)
 
         if chat_id in db:
@@ -422,6 +412,7 @@ class Call:
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update):
+            # 🛡️ FIX ATTRIBUTE ERROR: التأكد من وجود chat_id
             if not getattr(update, "chat_id", None):
                 return
             
