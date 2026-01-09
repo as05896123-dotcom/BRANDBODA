@@ -4,9 +4,17 @@ from datetime import datetime, timedelta
 from typing import Union
 
 from pyrogram import Client
-from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant
+from pyrogram.errors import (
+    FloodWait, 
+    ChatAdminRequired, 
+    UserAlreadyParticipant, 
+    UserBannedInChannel,
+    InviteHashExpired,
+    ChatInvalid
+)
 from pyrogram.types import InlineKeyboardMarkup
 
+# استيراد المكتبات المتوافقة مع 2.2.8
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, StreamEnded, ChatUpdate, Update
 from pytgcalls.exceptions import (
@@ -15,10 +23,8 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-try:
-    from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
-except ImportError:
-    from ntgcalls import TelegramServerError, ConnectionNotFound
+# شلت TelegramServerError عشان إصدارك قديم ومش محتاجها
+# وهنعتمد على Exception العام لمعالجة مشاكل الاتصال
 
 import config
 from strings import get_string
@@ -51,7 +57,7 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ SOUND ENGINE: نفس إعداداتك الأصلية (ستيريو عالي الجودة)
+# ⚙️ SOUND ENGINE
 # =======================================================================
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
     base_ffmpeg = (
@@ -128,13 +134,47 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
+    # ---------------------------------------------------
+    # 🧪 اختبار التشغيل (Boot Verification)
+    # ---------------------------------------------------
+    async def boot_verification(self):
+        LOGGER(__name__).info("🧪 جـاري اخـتـبـار الـمـسـاعـد في جـروب الـسـجـل...")
+        try:
+            # هنستخدم المساعد رقم 1 للاختبار في جروب السجل
+            if not self.one: return
+            
+            # رابط بث مباشر دائم للاختبار (أو ملف صوتي صغير)
+            test_link = "http://docs.google.com/uc?export=open&id=1s5RjXmXf3xM1tZ5r5RjXmXf3xM1tZ5" 
+            # لو الرابط ده مش شغال، ممكن تستبدله بأي رابط mp3 مباشر
+            
+            # محاولة الدخول
+            await self.one.play(config.LOGGER_ID, MediaStream(test_link))
+            LOGGER(__name__).info("✅ المساعد دخل الكول.. جاري اختبار الصوت لمدة 5 ثواني..")
+            
+            # ننتظر 5 ثواني عشان نتأكد إنه شغال
+            await asyncio.sleep(5)
+            
+            # الخروج بنجاح
+            await self.one.leave_call(config.LOGGER_ID)
+            LOGGER(__name__).info("✅ الاختبار نجح! المساعد خرج بسلام.")
+            
+        except Exception as e:
+            LOGGER(__name__).error(f"⚠️ فشل الاختبار! المساعد هيفضل في الكول عشان تشوف المشكلة.\nالخطأ: {e}")
+            # هنا مش هنعمل leave_call عشان يفضل موجود وتشوف الإيرور
+            pass
+
     async def start(self):
         LOGGER(__name__).info("🚀 Starting Studio Quality Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
             await asyncio.gather(*tasks)
+            
+        # تشغيل المستقبلات (Decorators)
         await self.decorators()
+        
+        # تشغيل اختبار الصوت (اختياري، لو عايز تلغيه امسح السطر ده)
+        # await self.boot_verification()
 
     async def ping(self):
         pings = []
@@ -187,21 +227,23 @@ class Call:
         client = await self.get_tgcalls(chat_id)
         lang = await get_lang(chat_id)
         _ = get_string(lang)
-        
-        # استخدام دالة البناء الأصلية عشان التوافق
         stream = build_stream(link, video=bool(video))
 
         try:
             await client.play(chat_id, stream)
-        # هنا دمجت ذكاء أليكسا في معالجة الأخطاء عشان لو الكول مقفول يقول رسالة واضحة
-        except (NoActiveGroupCall, ChatAdminRequired):
-            raise AssistantErr(_["call_8"]) # نفس كود الترجمة بتاعك
+        
+        # معالجة الأخطاء (بدون TelegramServerError)
+        except NoActiveGroupCall:
+            raise AssistantErr(_["call_8"])
+        except ChatAdminRequired:
+             raise AssistantErr("🥀 عذراً، البوت محتاج صلاحيات مشرف أو فيه مشكلة في الصلاحيات.")
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
-        except (TelegramServerError, ConnectionNotFound):
-            raise AssistantErr(_["call_10"])
         except Exception as e:
-            raise AssistantErr(f"{e}")
+            # هنا لو حصل أي خطأ غريب، هنعرضه عشان نعرف السبب
+            # ومش هنخرج المساعد عشان تلحق تشوف اللوج
+            LOGGER(__name__).error(f"Error joining call: {e}")
+            raise AssistantErr(f"❌ حدث خطأ غير متوقع: {e}")
             
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
@@ -215,7 +257,6 @@ class Call:
             except: pass
 
     async def change_stream(self, client, chat_id: int):
-        # لم يتم تغيير أي حرف في منطق التشغيل عشان التوافق مع ملفات الأزرار (Buttons)
         check = db.get(chat_id)
         popped = None
         loop = await get_loop(chat_id)
@@ -402,15 +443,20 @@ class Call:
             try: await assistant.leave_call(config.LOGGER_ID)
             except: pass
 
+    # =======================================================================
+    # 🚨 FIX COMPLETE for Version 2.2.8
+    # =======================================================================
     async def decorators(self):
         for client in [self.one, self.two, self.three, self.four, self.five]:
             if not client: continue
 
             @client.on_update()
             async def _handler(client, update):
+                # 1. فلتر التحديثات: تجاهل أي تحديث لا يحتوي على chat_id
+                # هذا هو الحل السحري لمشكلة AttributeError في الإصدارات القديمة
                 if not hasattr(update, 'chat_id'):
                     return
-                
+
                 chat_id = update.chat_id
 
                 if isinstance(update, StreamEnded):
