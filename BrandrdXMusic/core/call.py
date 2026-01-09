@@ -2,14 +2,14 @@ import asyncio
 import os
 import gc
 from datetime import datetime, timedelta
-from typing import Union, Dict, List
+from typing import Union
 
 from pyrogram import Client
-from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant, UserNotParticipant
+from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant
 from pyrogram.types import InlineKeyboardMarkup
 
 # ============================================================
-# ✅ PY-TGCALLS 2.2.8 IMPORTS
+# ✅ PY-TGCALLS 2.2.8 (STABLE SETUP)
 # ============================================================
 from pytgcalls import PyTgCalls
 from pytgcalls.types import (
@@ -26,7 +26,7 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-# استيراد آمن
+# Safe Imports
 try:
     from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
@@ -67,18 +67,24 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ ENGINE SETTINGS
+# ⚙️ FFMPEG STABILITY ENGINE (Based on Technical Report)
 # =======================================================================
+
+# 1. -re: يقرأ الملف بالسرعة الطبيعية (يمنع الخروج المفاجئ)
+# 2. -reconnect: يعيد الاتصال لو النت فصل (يمنع دروب الشبكة)
+# 3. -ar 48000 -ac 2: يضبط الصوت ليكون متوافق 100% مع تليجرام
+# 4. -bufsize: تكبير المخزن المؤقت لمنع التقطيع
 
 FFMPEG_OPTIONS = (
     "-re "
-    "-preset ultrafast "
-    "-tune zerolatency "
-    "-bufsize 8192k "
-    "-max_muxing_queue_size 1024 "
-    "-fflags +nobuffer "
-    "-flags low_delay "
-    "-af volume=1.5"
+    "-reconnect 1 "
+    "-reconnect_streamed 1 "
+    "-reconnect_delay_max 5 "
+    "-ar 48000 "
+    "-ac 2 "
+    "-bg 0 "
+    "-bufsize 10000k "
+    "-max_muxing_queue_size 2048 "
 )
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
@@ -102,20 +108,6 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStr
             ffmpeg_parameters=final_ffmpeg,
         )
 
-async def delayed_auto_clean(files):
-    try:
-        await asyncio.sleep(300)
-        await auto_clean(files)
-    except:
-        pass
-
-def memory_doctor(force: bool = False):
-    try:
-        if force:
-            gc.collect()
-    except:
-        pass
-
 async def _clear_(chat_id: int) -> None:
     try:
         popped = db.pop(chat_id, None)
@@ -127,7 +119,8 @@ async def _clear_(chat_id: int) -> None:
     except:
         pass
     finally:
-        memory_doctor(force=True)
+        try: gc.collect()
+        except: pass
 
 # =======================================================================
 # 🚀 CORE CLASS
@@ -135,22 +128,22 @@ async def _clear_(chat_id: int) -> None:
 
 class Call:
     def __init__(self):
-        self.assistants = []
         self.active_calls = set()
-
-        self.userbot1 = Client("BrandrdXMusic1", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING1) if config.STRING1 else None
+        
+        # cache_duration=100 (مهم جداً للاستقرار كما ذكرت)
+        self.userbot1 = Client("BrandrdXMusic1", config.API_ID, config.API_HASH, session_string=config.STRING1) if config.STRING1 else None
         self.one = PyTgCalls(self.userbot1, cache_duration=100) if self.userbot1 else None
 
-        self.userbot2 = Client("BrandrdXMusic2", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING2) if config.STRING2 else None
+        self.userbot2 = Client("BrandrdXMusic2", config.API_ID, config.API_HASH, session_string=config.STRING2) if config.STRING2 else None
         self.two = PyTgCalls(self.userbot2, cache_duration=100) if self.userbot2 else None
 
-        self.userbot3 = Client("BrandrdXMusic3", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING3) if config.STRING3 else None
+        self.userbot3 = Client("BrandrdXMusic3", config.API_ID, config.API_HASH, session_string=config.STRING3) if config.STRING3 else None
         self.three = PyTgCalls(self.userbot3, cache_duration=100) if self.userbot3 else None
 
-        self.userbot4 = Client("BrandrdXMusic4", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING4) if config.STRING4 else None
+        self.userbot4 = Client("BrandrdXMusic4", config.API_ID, config.API_HASH, session_string=config.STRING4) if config.STRING4 else None
         self.four = PyTgCalls(self.userbot4, cache_duration=100) if self.userbot4 else None
 
-        self.userbot5 = Client("BrandrdXMusic5", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING5) if config.STRING5 else None
+        self.userbot5 = Client("BrandrdXMusic5", config.API_ID, config.API_HASH, session_string=config.STRING5) if config.STRING5 else None
         self.five = PyTgCalls(self.userbot5, cache_duration=100) if self.userbot5 else None
 
         self.all_clients = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
@@ -167,7 +160,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Anti-Crash Engine (v2.2.8)...")
+        LOGGER(__name__).info("🚀 Starting FFMPEG Stable Engine...")
         tasks = [c.start() for c in self.all_clients]
         if tasks:
             await asyncio.gather(*tasks)
@@ -175,14 +168,6 @@ class Call:
         LOGGER(__name__).info("✅ Engine Started Successfully.")
 
     async def ping(self):
-        pings = []
-        for c in self.all_clients:
-            try:
-                if hasattr(c, 'ping'):
-                    pings.append(c.ping)
-                else:
-                    pings.append(10.0)
-            except: pass
         return "0.0 ms"
 
     async def pause_stream(self, chat_id: int):
@@ -206,33 +191,24 @@ class Call:
         await _clear_(chat_id)
         if chat_id in self.active_calls:
             try:
-                # ⚠️ محاولة الخروج الآمن
                 await client.leave_call(chat_id)
-            except:
-                pass
+            except: pass
             finally:
                 self.active_calls.discard(chat_id)
-        memory_doctor(force=True)
 
     async def force_stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             check = db.get(chat_id)
-            if check:
-                check.pop(0)
-        except:
-            pass
+            if check: check.pop(0)
+        except: pass
         await remove_active_video_chat(chat_id)
         await remove_active_chat(chat_id)
         await _clear_(chat_id)
         if chat_id in self.active_calls:
-            try:
-                await client.leave_call(chat_id)
-            except:
-                pass
-            finally:
-                self.active_calls.discard(chat_id)
-        memory_doctor(force=True)
+            try: await client.leave_call(chat_id)
+            except: pass
+            finally: self.active_calls.discard(chat_id)
 
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
         client = await self.get_tgcalls(chat_id)
@@ -243,8 +219,12 @@ class Call:
 
         try:
             await client.play(chat_id, stream)
+            
+            # ✅ STABILITY FIX: Wait for buffer to fill (Anti-Drop)
+            # ننتظر قليلاً لضمان أن FFMPEG قام بتجميع البيانات قبل أن نعتبر الاتصال ناجحاً
+            await asyncio.sleep(1) 
+            
         except (NoActiveGroupCall, ChatAdminRequired):
-            # ⛔ لا تحاول الخروج هنا، هذا يسبب الكراش
             raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
@@ -285,7 +265,6 @@ class Call:
         except:
             try:
                 await _clear_(chat_id)
-                # ⛔ Safe Exit
                 if chat_id in self.active_calls:
                     try: await client.leave_call(chat_id)
                     except: pass
@@ -465,6 +444,7 @@ class Call:
                 return
 
             if isinstance(update, StreamEnded):
+                # ✅ Handle Stream End correctly
                 if update.stream_type == StreamEnded.Type.AUDIO:
                     try: await self.change_stream(client, chat_id)
                     except: pass
@@ -474,9 +454,8 @@ class Call:
                 if (status & ChatUpdate.Status.LEFT_CALL) or \
                    (status & ChatUpdate.Status.KICKED) or \
                    (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
-                    # 🛑🛑🛑 THE CRASH FIX IS HERE 🛑🛑🛑
-                    # We are ALREADY out. Just clear memory.
-                    # DO NOT CALL stop_stream() or leave_call()
+                    
+                    # ✅ SILENT CLEANUP (Crash Prevention)
                     await _clear_(chat_id)
                     if chat_id in self.active_calls:
                         self.active_calls.discard(chat_id)
