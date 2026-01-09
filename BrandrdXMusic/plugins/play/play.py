@@ -61,20 +61,34 @@ async def play_commnd(
     url,
     fplay,
 ):
-    # تحديد نوع التشغيل بناءً على النص العربي
-    cmd_text = message.text.split()[0].replace("/", "").replace("!", "").replace(".", "")
-    if cmd_text in ["فيديو", "فيد"]:
-        video = True
-    
-    mystic = await message.reply_text(
-        _["play_2"].format(channel) if channel else _["play_1"]
-    )
+    # --- معالجة الأوامر العربية (فيديو / فيد) ---
+    if message.text:
+        cmd_text = message.text.split()[0].replace("/", "").replace("!", "").replace(".", "")
+        if cmd_text in ["فيديو", "فيد"]:
+            video = True
+
+    # --- إرسال رسالة الانتظار مع حماية FloodWait ---
+    try:
+        mystic = await message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        mystic = await message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+    except:
+        mystic = await message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+
     plist_id = None
     slider = None
     plist_type = None
     spotify = None
     user_id = message.from_user.id
     user_name = message.from_user.first_name
+    
     audio_telegram = (
         (message.reply_to_message.audio or message.reply_to_message.voice)
         if message.reply_to_message
@@ -85,6 +99,10 @@ async def play_commnd(
         if message.reply_to_message
         else None
     )
+
+    # ==========================
+    # 1. Telegram Audio
+    # ==========================
     if audio_telegram:
         if audio_telegram.file_size > config.TG_AUDIO_FILESIZE_LIMIT:
             return await mystic.edit_text(_["play_5"])
@@ -121,8 +139,12 @@ async def play_commnd(
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
-            return await mystic.delete()
+            return
         return
+
+    # ==========================
+    # 2. Telegram Video
+    # ==========================
     elif video_telegram:
         if message.reply_to_message.document:
             try:
@@ -165,8 +187,12 @@ async def play_commnd(
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
-            return await mystic.delete()
+            return
         return
+
+    # ==========================
+    # 3. URL Handling
+    # ==========================
     elif url:
         if await YouTube.exists(url):
             if "playlist" in url:
@@ -200,8 +226,9 @@ async def play_commnd(
         elif await Spotify.valid(url):
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
+                # تعريب مطول
                 return await mystic.edit_text(
-                    "» sᴘᴏᴛɪғʏ ɪs ɴᴏᴛ sᴜᴘᴘᴏʀᴛᴇᴅ ʏᴇᴛ.\n\nᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ."
+                    "» عــذراً .. سـبـوتـيـفـاي غـيـر مـدعـوم حـالـيـاً.\n\nيـرجـى الـمـحـاولـة فـي وقـت لاحــق."
                 )
             if "track" in url:
                 try:
@@ -298,7 +325,7 @@ async def play_commnd(
                 ex_type = type(e).__name__
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
-            return await mystic.delete()
+            return
         else:
             try:
                 await Hotty.stream_call(url)
@@ -345,6 +372,10 @@ async def play_commnd(
         except:
             return await mystic.edit_text(_["play_3"])
         streamtype = "youtube"
+
+    # ==========================
+    # 4. Final Execution
+    # ==========================
     if str(playmode) == "Direct":
         if not plist_type:
             if details["duration_min"]:
@@ -384,7 +415,6 @@ async def play_commnd(
             ex_type = type(e).__name__
             err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
             return await mystic.edit_text(err)
-        await mystic.delete()
         return await play_logs(message, streamtype=streamtype)
     else:
         if plist_type:
@@ -466,9 +496,17 @@ async def play_music(client, CallbackQuery, _):
         await CallbackQuery.answer()
     except:
         pass
-    mystic = await CallbackQuery.message.reply_text(
-        _["play_2"].format(channel) if channel else _["play_1"]
-    )
+    
+    try:
+        mystic = await CallbackQuery.message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        mystic = await CallbackQuery.message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+        
     try:
         details, track_id = await YouTube.track(vidid, True)
     except:
@@ -511,14 +549,15 @@ async def play_music(client, CallbackQuery, _):
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
         return await mystic.edit_text(err)
-    return await mystic.delete()
+    return
 
 
 @app.on_callback_query(filters.regex("AnonymousAdmin") & ~BANNED_USERS)
 async def piyush_check(client, CallbackQuery):
     try:
+        # تعريب مطول للرد على المشرف المتخفي
         await CallbackQuery.answer(
-            "» ʀᴇᴠᴇʀᴛ ʙᴀᴄᴋ ᴛᴏ ᴜsᴇʀ ᴀᴄᴄᴏᴜɴᴛ :\n\nᴏᴘᴇɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ sᴇᴛᴛɪɴɢs.\n-> ᴀᴅᴍɪɴɪsᴛʀᴀᴛᴏʀs\n-> ᴄʟɪᴄᴋ ᴏɴ ʏᴏᴜʀ ɴᴀᴍᴇ\n-> ᴜɴᴄʜᴇᴄᴋ ᴀɴᴏɴʏᴍᴏᴜs ᴀᴅᴍɪɴ ᴘᴇʀᴍɪssɪᴏɴs.",
+            "» يـرجـى الـعـودة إلـى حـسـاب الـمـسـتـخـدم :\n\nافـتـح إعـدادات الـمـجـمـوعـة.\n-> الـمـشـرفـيـن\n-> اضـغـط عـلـى اسـمـك\n-> قـم بـإلـغـاء تـحـديـد صـلاحـيـة الـمـشـرف الـمـتـخـفـي.",
             show_alert=True,
         )
     except:
@@ -546,9 +585,15 @@ async def play_playlists_command(client, CallbackQuery, _):
         await CallbackQuery.answer()
     except:
         pass
-    mystic = await CallbackQuery.message.reply_text(
-        _["play_2"].format(channel) if channel else _["play_1"]
-    )
+    try:
+        mystic = await CallbackQuery.message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        mystic = await CallbackQuery.message.reply_text(
+            _["play_2"].format(channel) if channel else _["play_1"]
+        )
     videoid = lyrical.get(videoid)
     video = True if mode == "v" else None
     ffplay = True if fplay == "f" else None
@@ -602,7 +647,7 @@ async def play_playlists_command(client, CallbackQuery, _):
         ex_type = type(e).__name__
         err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
         return await mystic.edit_text(err)
-    return await mystic.delete()
+    return
 
 
 @app.on_callback_query(filters.regex("slider") & ~BANNED_USERS)
