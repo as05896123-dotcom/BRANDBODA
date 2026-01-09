@@ -1,55 +1,10 @@
 import asyncio
 import os
-import importlib
 from datetime import datetime, timedelta
 from typing import Union
 
-# =======================================================================
-# 🛠️ FINAL FIX: التعديل الجذري باستخدام importlib
-# ده الحل الوحيد عشان نوصل للملف المخفي ونعدله بدون Errors
-# =======================================================================
-try:
-    # بنجيب الملف "غصب" باستخدام importlib
-    # عشان نتجنب AttributeError: module has no attribute mtproto
-    pyrogram_client_module = importlib.import_module("pytgcalls.mtproto.pyrogram_client")
-    
-    # بنمسك الكلاس المسؤول عن المشكلة
-    TargetClient = pyrogram_client_module.PyrogramClient
-    
-    # بنحفظ الدالة الأصلية
-    original_on_update = TargetClient.on_update
-
-    # بنعمل الفلتر بتاعنا
-    async def patched_on_update(self, client, update):
-        # 1. لو التحديث مفيهوش chat_id (السبب الرئيسي للكراش) -> تجاهله
-        if not hasattr(update, 'chat_id'):
-            return
-        
-        # 2. تشغيل التحديثات السليمة فقط
-        try:
-            await original_on_update(self, client, update)
-        except AttributeError:
-            pass 
-        except Exception:
-            pass
-
-    # بنركب الفلتر مكان الدالة الأصلية
-    TargetClient.on_update = patched_on_update
-    print("✅ PyTgCalls Patch Applied Successfully via importlib!")
-
-except Exception as e:
-    print(f"⚠️ Patch Warning: {e}")
-# =======================================================================
-
 from pyrogram import Client
-from pyrogram.errors import (
-    FloodWait, 
-    ChatAdminRequired, 
-    UserAlreadyParticipant, 
-    UserBannedInChannel,
-    InviteHashExpired,
-    ChatInvalid
-)
+from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant
 from pyrogram.types import InlineKeyboardMarkup
 
 from pytgcalls import PyTgCalls
@@ -59,6 +14,11 @@ from pytgcalls.exceptions import (
     NoAudioSourceFound,
     NoVideoSourceFound
 )
+
+try:
+    from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
+except ImportError:
+    from ntgcalls import TelegramServerError, ConnectionNotFound
 
 import config
 from strings import get_string
@@ -91,23 +51,17 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ SOUND ENGINE
+# ⚙️ SOUND FIX: استخدام OPUS (أفضل جودة وأنقى صوت)
 # =======================================================================
+
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
-    base_ffmpeg = (
-        "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
-        "-ac 2 -ar 48000 -sn -dn "
-    )
-
-    if ffmpeg:
-        ffmpeg = base_ffmpeg + ffmpeg
-    else:
-        ffmpeg = base_ffmpeg
-
+    # إلغاء إعدادات PCM القديمة واستخدام الإعدادات الافتراضية الذكية
+    # المكتبة هتقوم باختيار أفضل كوديك تلقائياً (Opus)
+    
     if video:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,
+            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
@@ -116,7 +70,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStr
     else:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,
+            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
@@ -227,19 +181,19 @@ class Call:
         client = await self.get_tgcalls(chat_id)
         lang = await get_lang(chat_id)
         _ = get_string(lang)
+        
         stream = build_stream(link, video=bool(video))
 
         try:
             await client.play(chat_id, stream)
-        except NoActiveGroupCall:
+        except (NoActiveGroupCall, ChatAdminRequired):
             raise AssistantErr(_["call_8"])
-        except ChatAdminRequired:
-             raise AssistantErr("🥀 عذراً، البوت محتاج صلاحيات مشرف أو فيه مشكلة في الصلاحيات.")
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
+        except (TelegramServerError, ConnectionNotFound):
+            raise AssistantErr(_["call_10"])
         except Exception as e:
-            LOGGER(__name__).error(f"Error joining call: {e}")
-            raise AssistantErr(f"❌ حدث خطأ غير متوقع: {e}")
+            raise AssistantErr(f"{e}")
             
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
@@ -365,7 +319,7 @@ class Call:
                 elif videoid == "soundcloud":
                     run = await app.send_photo(
                         chat_id=original_chat_id,
-                        photo=config.SOUNDCLOUD_IMG_URL,
+                        photo=config.SOUNCLOUD_IMG_URL,
                         caption=_["stream_1"].format(config.SUPPORT_CHAT, title[:23], check[0]["dur"], user),
                         reply_markup=InlineKeyboardMarkup(get_btn("soundcloud")),
                     )
@@ -440,27 +394,30 @@ class Call:
             except: pass
 
     async def decorators(self):
-        for client in [self.one, self.two, self.three, self.four, self.five]:
-            if not client: continue
+        assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
-            @client.on_update()
-            async def _handler(client, update):
-                # برضه حماية هنا زيادة تأكيد
-                if not hasattr(update, 'chat_id'):
-                    return
+        async def unified_update_handler(client, update: Update):
+            if not getattr(update, "chat_id", None):
+                return
+            
+            chat_id = update.chat_id
 
-                chat_id = update.chat_id
+            if isinstance(update, StreamEnded):
+                if update.stream_type == StreamEnded.Type.AUDIO:
+                    try: await self.change_stream(client, chat_id)
+                    except: pass
+            
+            elif isinstance(update, ChatUpdate):
+                status = update.status
+                if (status & ChatUpdate.Status.LEFT_CALL) or \
+                   (status & ChatUpdate.Status.KICKED) or \
+                   (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
+                    await self.stop_stream(chat_id)
 
-                if isinstance(update, StreamEnded):
-                    try:
-                        await self.change_stream(client, chat_id)
-                    except Exception as e:
-                        LOGGER(__name__).error(f"Stream End Error: {e}")
-                
-                elif isinstance(update, ChatUpdate):
-                    if update.status == ChatUpdate.Status.LEFT_CALL or \
-                       update.status == ChatUpdate.Status.KICKED or \
-                       update.status == ChatUpdate.Status.CLOSED_VOICE_CHAT:
-                        await self.stop_stream(chat_id)
+        for assistant in assistants:
+            try:
+                if hasattr(assistant, 'on_update'):
+                    assistant.on_update()(unified_update_handler)
+            except: pass
 
 Hotty = Call()
