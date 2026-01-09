@@ -14,19 +14,22 @@ class Hotty(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             bot_token=config.BOT_TOKEN,
-            workers=50,
-            max_concurrent_transmissions=7,
+            workers=50,  # أعلى أداء (Performance)
+            max_concurrent_transmissions=7, # سرعة نقل عالية
         )
         LOGGER(__name__).info("Bot client initialized...")
 
     async def start(self):
         await super().start()
-        me = await self.get_me()
-        self.username, self.id = me.username, me.id
-        self.name = f"{me.first_name} {me.last_name or ''}".strip()
-        self.mention = me.mention
+        get_me = await self.get_me()
+        self.username = get_me.username
+        self.id = get_me.id
+        self.name = f"{get_me.first_name} {get_me.last_name or ''}".strip()
+        self.mention = get_me.mention
 
-        # 1. محاولة إرسال رسالة الترحيب مع حماية ضد الحظر
+        # ====================================================
+        # 🛡️ LOG GROUP CHECK: فحص جروب السجل (بدون إيقاف البوت)
+        # ====================================================
         try:
             await self.send_message(
                 config.LOGGER_ID,
@@ -38,23 +41,24 @@ class Hotty(Client):
                 ),
             )
         except errors.FloodWait as e:
-            # 🛡️ الحماية: لو فيه حظر، استنى وكمل عادي ومتفصلش
+            # لو التليجرام معلق، نستنى شوية ونكمل عادي
             LOGGER(__name__).warning(f"⚠️ في حظر مؤقت (FloodWait) لمدة {e.value} ثانية.. هنتظر ونكمل.")
             await asyncio.sleep(e.value)
         except (errors.ChannelInvalid, errors.PeerIdInvalid):
+            # لو الجروب غلط، نطلع تحذير بس منوقفش البوت
             LOGGER(__name__).error("❌ البوت مش عارف يوصل لجروب السجل (Log Group).. اتأكد إنه مشرف!")
-            # مش هنعمل exit عشان البوت يشتغل حتى لو اللوج بايظ
         except Exception as exc:
-            LOGGER(__name__).error(f"❌ خطأ في جروب السجل (تجاهل): {type(exc).__name__}")
+            LOGGER(__name__).error(f"❌ خطأ غير متوقع في جروب السجل (تجاهل): {type(exc).__name__}")
 
-        # 2. التأكد من صلاحيات الأدمن (بدون ما نقفل البوت لو فشل)
+        # ====================================================
+        # 👮 ADMIN CHECK: التحقق من الصلاحيات (اختياري)
+        # ====================================================
         try:
             member = await self.get_chat_member(config.LOGGER_ID, self.id)
             if member.status != ChatMemberStatus.ADMINISTRATOR:
                 LOGGER(__name__).warning("⚠️ تنبيه: البوت ليس أدمن في جروب السجل، يفضل رفعه.")
-        except Exception as e:
-            # تجاهل الخطأ وكمل تشغيل
-            LOGGER(__name__).warning(f"⚠️ فشل التحقق من صلاحيات الأدمن (تجاهل): {e}")
+        except Exception:
+            pass # تجاهل الخطأ لو مش عارفين نتحقق
 
         LOGGER(__name__).info(f"✅ تم تشغيل بوت الميوزك بنجاح : {self.name} (@{self.username})")
 
