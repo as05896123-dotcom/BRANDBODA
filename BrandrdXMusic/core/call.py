@@ -51,17 +51,31 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ SOUND FIX: استخدام OPUS (أفضل جودة وأنقى صوت)
+# ⚙️ SOUND ENGINE: Stereo + Anti-Stutter (عدم التقطيع)
 # =======================================================================
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
-    # إلغاء إعدادات PCM القديمة واستخدام الإعدادات الافتراضية الذكية
-    # المكتبة هتقوم باختيار أفضل كوديك تلقائياً (Opus)
+    # إعدادات FFmpeg القوية لمنع التقطيع وتفعيل الاستيريو
+    # -reconnect 1: إعادة الاتصال التلقائي عند انقطاع البيانات
+    # -reconnect_streamed 1: تحسين تدفق البيانات المباشر
+    # -reconnect_delay_max 5: مهلة 5 ثواني للمحاولة
+    # -ac 2: إجبار الصوت يكون ستيريو (قناتين)
+    # -ar 48000: جودة صوت 48kHz (نقية جداً)
     
+    base_ffmpeg = (
+        "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
+        "-ac 2 -ar 48000 -sn -dn "
+    )
+
+    if ffmpeg:
+        ffmpeg = base_ffmpeg + ffmpeg
+    else:
+        ffmpeg = base_ffmpeg
+
     if video:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
+            audio_parameters=AudioQuality.STUDIO, # أعلى جودة صوت
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
@@ -70,7 +84,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStr
     else:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO,  # جودة استوديو (نقية جداً)
+            audio_parameters=AudioQuality.STUDIO, # أعلى جودة صوت
             video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
@@ -182,6 +196,7 @@ class Call:
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         
+        # هنا يتم استخدام بناء الستريم الجديد مع مانع التقطيع
         stream = build_stream(link, video=bool(video))
 
         try:
@@ -393,31 +408,30 @@ class Call:
             try: await assistant.leave_call(config.LOGGER_ID)
             except: pass
 
+    # =======================================================================
+    # 🚨 معالجة التحديثات بشكل منفصل لتجنب الكراش
+    # =======================================================================
     async def decorators(self):
-        assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
+        for client in [self.one, self.two, self.three, self.four, self.five]:
+            if not client: continue
 
-        async def unified_update_handler(client, update: Update):
-            if not getattr(update, "chat_id", None):
-                return
-            
-            chat_id = update.chat_id
+            @client.on_stream_end()
+            async def on_stream_end(client, update: StreamEnded):
+                try:
+                    await self.change_stream(client, update.chat_id)
+                except Exception as e:
+                    LOGGER(__name__).error(f"Stream End Error: {e}")
 
-            if isinstance(update, StreamEnded):
-                if update.stream_type == StreamEnded.Type.AUDIO:
-                    try: await self.change_stream(client, chat_id)
-                    except: pass
-            
-            elif isinstance(update, ChatUpdate):
-                status = update.status
-                if (status & ChatUpdate.Status.LEFT_CALL) or \
-                   (status & ChatUpdate.Status.KICKED) or \
-                   (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
-                    await self.stop_stream(chat_id)
+            @client.on_closed_voice_chat()
+            async def on_closed_voice_chat(client, update: ChatUpdate):
+                await self.stop_stream(update.chat_id)
 
-        for assistant in assistants:
-            try:
-                if hasattr(assistant, 'on_update'):
-                    assistant.on_update()(unified_update_handler)
-            except: pass
+            @client.on_kicked()
+            async def on_kicked(client, update: ChatUpdate):
+                await self.stop_stream(update.chat_id)
+
+            @client.on_left()
+            async def on_left(client, update: ChatUpdate):
+                await self.stop_stream(update.chat_id)
 
 Hotty = Call()
