@@ -7,9 +7,6 @@ from BrandrdXMusic.misc import dbb, heroku
 from SafoneAPI import SafoneAPI
 from .logging import LOGGER
 
-# تم حذف الباتش القديم لأنه كان يسبب Loop Restart
-# ملف call.py الجديد يقوم بالواجب
-
 dirr()
 git()
 dbb()
