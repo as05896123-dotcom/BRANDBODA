@@ -54,7 +54,8 @@ python-dotenv
 pyyaml>=6.0.2
 hachoir
 speedtest-cli
-dnspython>=2.6.1
+# 🔥 تم تعديل السطر ده عشان يحل مشكلة الكراش 🔥
+dnspython==2.4.2
 future
 unidecode
 qrcode
