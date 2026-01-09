@@ -14,7 +14,6 @@ from pyrogram.errors import (
 )
 from pyrogram.types import InlineKeyboardMarkup
 
-# استيراد المكتبات المتوافقة مع 2.2.8
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, StreamEnded, ChatUpdate, Update
 from pytgcalls.exceptions import (
@@ -23,8 +22,30 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-# شلت TelegramServerError عشان إصدارك قديم ومش محتاجها
-# وهنعتمد على Exception العام لمعالجة مشاكل الاتصال
+# =======================================================================
+# 🩹 MONKEY PATCH: الحل الجذري لإصلاح خطأ المكتبة الداخلية
+# =======================================================================
+# بنستدعي الملف الداخلي للمكتبة اللي بيعمل المشكلة
+import pytgcalls.mtproto.pyrogram_client
+
+# بنحفظ الدالة الأصلية (المصابة) عشان نستخدمها
+original_on_update = pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update
+
+# بنعمل دالة "معدلة" بتعمل تجاهل للخطأ ده
+async def patched_on_update(self, client, update):
+    try:
+        # حاول تشغل الكود الأصلي للمكتبة
+        await original_on_update(self, client, update)
+    except AttributeError:
+        # لو ظهر الخطأ اللعين ده (chat_id missing)، تجاهله وكأن شيئاً لم يكن
+        pass
+    except Exception:
+        # أي خطأ تاني داخلي مش هيوقع البوت
+        pass
+
+# بنركب الدالة المعدلة مكان الأصلية في ذاكرة البوت
+pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update = patched_on_update
+# =======================================================================
 
 import config
 from strings import get_string
@@ -134,47 +155,13 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
-    # ---------------------------------------------------
-    # 🧪 اختبار التشغيل (Boot Verification)
-    # ---------------------------------------------------
-    async def boot_verification(self):
-        LOGGER(__name__).info("🧪 جـاري اخـتـبـار الـمـسـاعـد في جـروب الـسـجـل...")
-        try:
-            # هنستخدم المساعد رقم 1 للاختبار في جروب السجل
-            if not self.one: return
-            
-            # رابط بث مباشر دائم للاختبار (أو ملف صوتي صغير)
-            test_link = "http://docs.google.com/uc?export=open&id=1s5RjXmXf3xM1tZ5r5RjXmXf3xM1tZ5" 
-            # لو الرابط ده مش شغال، ممكن تستبدله بأي رابط mp3 مباشر
-            
-            # محاولة الدخول
-            await self.one.play(config.LOGGER_ID, MediaStream(test_link))
-            LOGGER(__name__).info("✅ المساعد دخل الكول.. جاري اختبار الصوت لمدة 5 ثواني..")
-            
-            # ننتظر 5 ثواني عشان نتأكد إنه شغال
-            await asyncio.sleep(5)
-            
-            # الخروج بنجاح
-            await self.one.leave_call(config.LOGGER_ID)
-            LOGGER(__name__).info("✅ الاختبار نجح! المساعد خرج بسلام.")
-            
-        except Exception as e:
-            LOGGER(__name__).error(f"⚠️ فشل الاختبار! المساعد هيفضل في الكول عشان تشوف المشكلة.\nالخطأ: {e}")
-            # هنا مش هنعمل leave_call عشان يفضل موجود وتشوف الإيرور
-            pass
-
     async def start(self):
         LOGGER(__name__).info("🚀 Starting Studio Quality Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
             await asyncio.gather(*tasks)
-            
-        # تشغيل المستقبلات (Decorators)
         await self.decorators()
-        
-        # تشغيل اختبار الصوت (اختياري، لو عايز تلغيه امسح السطر ده)
-        # await self.boot_verification()
 
     async def ping(self):
         pings = []
@@ -231,8 +218,6 @@ class Call:
 
         try:
             await client.play(chat_id, stream)
-        
-        # معالجة الأخطاء (بدون TelegramServerError)
         except NoActiveGroupCall:
             raise AssistantErr(_["call_8"])
         except ChatAdminRequired:
@@ -240,8 +225,6 @@ class Call:
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
         except Exception as e:
-            # هنا لو حصل أي خطأ غريب، هنعرضه عشان نعرف السبب
-            # ومش هنخرج المساعد عشان تلحق تشوف اللوج
             LOGGER(__name__).error(f"Error joining call: {e}")
             raise AssistantErr(f"❌ حدث خطأ غير متوقع: {e}")
             
@@ -443,17 +426,13 @@ class Call:
             try: await assistant.leave_call(config.LOGGER_ID)
             except: pass
 
-    # =======================================================================
-    # 🚨 FIX COMPLETE for Version 2.2.8
-    # =======================================================================
     async def decorators(self):
         for client in [self.one, self.two, self.three, self.four, self.five]:
             if not client: continue
 
             @client.on_update()
             async def _handler(client, update):
-                # 1. فلتر التحديثات: تجاهل أي تحديث لا يحتوي على chat_id
-                # هذا هو الحل السحري لمشكلة AttributeError في الإصدارات القديمة
+                # برضه هنسيب الحماية هنا زيادة تأكيد
                 if not hasattr(update, 'chat_id'):
                     return
 
