@@ -1,7 +1,45 @@
 import asyncio
 import os
+import importlib
 from datetime import datetime, timedelta
 from typing import Union
+
+# =======================================================================
+# 🛠️ FINAL FIX: التعديل الجذري باستخدام importlib
+# ده الحل الوحيد عشان نوصل للملف المخفي ونعدله بدون Errors
+# =======================================================================
+try:
+    # بنجيب الملف "غصب" باستخدام importlib
+    # عشان نتجنب AttributeError: module has no attribute mtproto
+    pyrogram_client_module = importlib.import_module("pytgcalls.mtproto.pyrogram_client")
+    
+    # بنمسك الكلاس المسؤول عن المشكلة
+    TargetClient = pyrogram_client_module.PyrogramClient
+    
+    # بنحفظ الدالة الأصلية
+    original_on_update = TargetClient.on_update
+
+    # بنعمل الفلتر بتاعنا
+    async def patched_on_update(self, client, update):
+        # 1. لو التحديث مفيهوش chat_id (السبب الرئيسي للكراش) -> تجاهله
+        if not hasattr(update, 'chat_id'):
+            return
+        
+        # 2. تشغيل التحديثات السليمة فقط
+        try:
+            await original_on_update(self, client, update)
+        except AttributeError:
+            pass 
+        except Exception:
+            pass
+
+    # بنركب الفلتر مكان الدالة الأصلية
+    TargetClient.on_update = patched_on_update
+    print("✅ PyTgCalls Patch Applied Successfully via importlib!")
+
+except Exception as e:
+    print(f"⚠️ Patch Warning: {e}")
+# =======================================================================
 
 from pyrogram import Client
 from pyrogram.errors import (
@@ -21,31 +59,6 @@ from pytgcalls.exceptions import (
     NoAudioSourceFound,
     NoVideoSourceFound
 )
-
-# =======================================================================
-# 🩹 MONKEY PATCH: الحل الجذري لإصلاح خطأ المكتبة الداخلية
-# =======================================================================
-# بنستدعي الملف الداخلي للمكتبة اللي بيعمل المشكلة
-import pytgcalls.mtproto.pyrogram_client
-
-# بنحفظ الدالة الأصلية (المصابة) عشان نستخدمها
-original_on_update = pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update
-
-# بنعمل دالة "معدلة" بتعمل تجاهل للخطأ ده
-async def patched_on_update(self, client, update):
-    try:
-        # حاول تشغل الكود الأصلي للمكتبة
-        await original_on_update(self, client, update)
-    except AttributeError:
-        # لو ظهر الخطأ اللعين ده (chat_id missing)، تجاهله وكأن شيئاً لم يكن
-        pass
-    except Exception:
-        # أي خطأ تاني داخلي مش هيوقع البوت
-        pass
-
-# بنركب الدالة المعدلة مكان الأصلية في ذاكرة البوت
-pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update = patched_on_update
-# =======================================================================
 
 import config
 from strings import get_string
@@ -432,7 +445,7 @@ class Call:
 
             @client.on_update()
             async def _handler(client, update):
-                # برضه هنسيب الحماية هنا زيادة تأكيد
+                # برضه حماية هنا زيادة تأكيد
                 if not hasattr(update, 'chat_id'):
                     return
 
