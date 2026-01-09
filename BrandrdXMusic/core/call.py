@@ -26,7 +26,7 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-# استيراد آمن لتجنب مشاكل السيرفر
+# استيراد آمن
 try:
     from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
@@ -67,10 +67,9 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ HYBRID ENGINE: STUDIO QUALITY + SPEED
+# ⚙️ ENGINE SETTINGS
 # =======================================================================
 
-# إعدادات لتقليل التأخير (Lag) مع الحفاظ على الجودة
 FFMPEG_OPTIONS = (
     "-re "
     "-preset ultrafast "
@@ -83,14 +82,13 @@ FFMPEG_OPTIONS = (
 )
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
-    # دمجنا الجودة العالية (STUDIO) مع سرعة الأداء (FFMPEG_OPTIONS)
     final_ffmpeg = f"{ffmpeg} {FFMPEG_OPTIONS}" if ffmpeg else FFMPEG_OPTIONS
     
     if video:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO, # ✅ صوت نقي (Opus)
-            video_parameters=VideoQuality.HD_720p, # ✅ فيديو عالي الدقة
+            audio_parameters=AudioQuality.STUDIO,
+            video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
             ffmpeg_parameters=final_ffmpeg,
@@ -98,7 +96,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStr
     else:
         return MediaStream(
             media_path=path,
-            audio_parameters=AudioQuality.STUDIO, # ✅ صوت نقي (Opus)
+            audio_parameters=AudioQuality.STUDIO,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
             ffmpeg_parameters=final_ffmpeg,
@@ -140,7 +138,6 @@ class Call:
         self.assistants = []
         self.active_calls = set()
 
-        # ✅ CRITICAL FIX: cache_duration=100 لمنع الكراش
         self.userbot1 = Client("BrandrdXMusic1", api_id=config.API_ID, api_hash=config.API_HASH, session_string=config.STRING1) if config.STRING1 else None
         self.one = PyTgCalls(self.userbot1, cache_duration=100) if self.userbot1 else None
 
@@ -170,7 +167,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Studio Quality Engine (v2.2.8)...")
+        LOGGER(__name__).info("🚀 Starting Anti-Crash Engine (v2.2.8)...")
         tasks = [c.start() for c in self.all_clients]
         if tasks:
             await asyncio.gather(*tasks)
@@ -209,6 +206,7 @@ class Call:
         await _clear_(chat_id)
         if chat_id in self.active_calls:
             try:
+                # ⚠️ محاولة الخروج الآمن
                 await client.leave_call(chat_id)
             except:
                 pass
@@ -246,7 +244,7 @@ class Call:
         try:
             await client.play(chat_id, stream)
         except (NoActiveGroupCall, ChatAdminRequired):
-            # ✅ FIX: إزالة leave_call لمنع الكراش
+            # ⛔ لا تحاول الخروج هنا، هذا يسبب الكراش
             raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
@@ -254,12 +252,6 @@ class Call:
             raise AssistantErr(_["call_10"])
         except Exception as e:
             LOGGER(__name__).error(f"Join Error: {e}")
-            if "NotConnected" in str(e):
-                try:
-                    await client.leave_call(chat_id)
-                    await client.play(chat_id, stream)
-                except: pass
-                return
             raise AssistantErr(_["call_8"])
             
         self.active_calls.add(chat_id)
@@ -293,7 +285,11 @@ class Call:
         except:
             try:
                 await _clear_(chat_id)
-                return await client.leave_call(chat_id)
+                # ⛔ Safe Exit
+                if chat_id in self.active_calls:
+                    try: await client.leave_call(chat_id)
+                    except: pass
+                return 
             except: return
         
         queued = check[0]["file"]
@@ -478,7 +474,12 @@ class Call:
                 if (status & ChatUpdate.Status.LEFT_CALL) or \
                    (status & ChatUpdate.Status.KICKED) or \
                    (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
-                    await self.stop_stream(chat_id)
+                    # 🛑🛑🛑 THE CRASH FIX IS HERE 🛑🛑🛑
+                    # We are ALREADY out. Just clear memory.
+                    # DO NOT CALL stop_stream() or leave_call()
+                    await _clear_(chat_id)
+                    if chat_id in self.active_calls:
+                        self.active_calls.discard(chat_id)
 
         for assistant in self.all_clients:
             try:
