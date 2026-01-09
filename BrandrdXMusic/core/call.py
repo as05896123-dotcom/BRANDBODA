@@ -2,7 +2,7 @@ import asyncio
 import os
 import gc
 from datetime import datetime, timedelta
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Optional
 
 from pyrogram import Client
 from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant
@@ -26,7 +26,7 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-# Safe Imports Logic
+# Safe Import Logic for Telegram Errors
 try:
     from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
@@ -67,11 +67,10 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# ⚙️ DYNAMIC FFMPEG ENGINE (Titan Config)
+# ⚙️ TITAN FFMPEG CONFIGURATION
 # =======================================================================
 
 def get_ffmpeg_flags(is_live: bool) -> str:
-    # إعدادات قوية جداً لضمان عدم التقطيع
     base = (
         "-re -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
         "-reconnect_on_network_error 1 "
@@ -122,7 +121,7 @@ async def _aggressive_clean_(chat_id: int):
         gc.collect()
 
 # =======================================================================
-# 💎 THE TITAN ENGINE (Fixed for 2.2.8)
+# 💎 THE TITAN ENGINE (INTEGRATED)
 # =======================================================================
 
 class Call:
@@ -139,16 +138,13 @@ class Call:
         configs = [config.STRING1, config.STRING2, config.STRING3, config.STRING4, config.STRING5]
         for index, string in enumerate(configs, 1):
             if string:
-                ub = Client(f"Assistant{index}", config.API_ID, config.API_HASH, session_string=string)
+                ub = Client(f"BrandrdXMusic{index}", config.API_ID, config.API_HASH, session_string=string)
+                # Cache Duration 100 prevents premature disconnects
                 pc = PyTgCalls(ub, cache_duration=100)
                 self.clients.append(pc)
+                
                 setattr(self, f"userbot{index}", ub)
                 setattr(self, f"one" if index==1 else f"two" if index==2 else f"three" if index==3 else f"four" if index==4 else "five", pc)
-
-        for pc in self.clients:
-            # Map based on userbot ID (Compatible way)
-            # We wait for start to map correctly, or map lazily
-            pass
 
     async def get_lock(self, chat_id: int) -> asyncio.Lock:
         async with self.init_lock:
@@ -164,17 +160,61 @@ class Call:
         return self.clients[0]
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Titan Engine v5.0 (Fixed) Starting...")
+        LOGGER(__name__).info("🚀 Titan Engine Integrated (v6.0) Starting...")
         await asyncio.gather(*[c.start() for c in self.clients])
         
-        # Build map after start
+        # Build Map
         for pc in self.clients:
             if hasattr(pc, 'app'):
                 self.pytgcalls_map[id(pc.app)] = pc
                 
         await self.decorators()
-        LOGGER(__name__).info("✅ Engine Online.")
+        LOGGER(__name__).info("✅ Engine Online & Stable.")
 
+    async def ping(self):
+        pings = []
+        for c in self.clients:
+            try: pings.append(c.ping)
+            except: pass
+        return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
+
+    # ================= COMMANDS =================
+    async def pause_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        await client.pause(chat_id)
+
+    async def resume_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        await client.resume(chat_id)
+
+    async def mute_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        await client.mute(chat_id)
+
+    async def unmute_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        await client.unmute(chat_id)
+
+    async def stop_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        await self.stop_stream_internal(chat_id, client)
+
+    async def force_stop_stream(self, chat_id: int):
+        client = await self.get_tgcalls(chat_id)
+        try:
+            check = db.get(chat_id)
+            if check: check.pop(0)
+        except: pass
+        await self.stop_stream_internal(chat_id, client)
+
+    async def stop_stream_internal(self, chat_id: int, client):
+        await _aggressive_clean_(chat_id)
+        if chat_id in self.active_calls:
+            try: await client.leave_call(chat_id)
+            except: pass
+            self.active_calls.discard(chat_id)
+
+    # ================= LOGIC: JOIN =================
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: bool = False, image: str = None):
         client = await self.get_tgcalls(chat_id)
         lang = await get_lang(chat_id)
@@ -186,15 +226,15 @@ class Call:
         async with await self.get_lock(chat_id):
             try:
                 await client.play(chat_id, stream)
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(1)
             except (NoActiveGroupCall, ChatAdminRequired):
                 raise AssistantErr(_["call_8"])
             except (NoAudioSourceFound, NoVideoSourceFound, ConnectionNotFound):
-                # Fallback Logic can be added here, but for join we report error
+                # For join, we report error, unlike change_stream where we retry
                 raise AssistantErr(_["call_11"])
             except Exception as e:
                 LOGGER(__name__).error(f"Join Error: {e}")
-                raise AssistantErr(f"Error: {e}")
+                raise AssistantErr(f"{e}")
 
             self.active_calls.add(chat_id)
             await add_active_chat(chat_id)
@@ -207,6 +247,7 @@ class Call:
                         autoend[chat_id] = datetime.now() + timedelta(minutes=1)
                 except: pass
 
+    # ================= LOGIC: CHANGE STREAM (SMART HANDOVER) =================
     async def change_stream(self, client, chat_id: int):
         async with await self.get_lock(chat_id):
             check = db.get(chat_id)
@@ -227,7 +268,7 @@ class Call:
             except:
                 return await self.stop_stream_internal(chat_id, client)
 
-            # Data Setup
+            # Data Extraction
             track = check[0]
             queued_file = track["file"]
             vidid = track["vidid"]
@@ -239,7 +280,10 @@ class Call:
             lang = await get_lang(chat_id)
             _ = get_string(lang)
 
-            # 🧠 SMART HANDOVER LOGIC
+            if chat_id in db:
+                db[chat_id][0]["played"] = 0
+
+            # 🧠 TITAN LOGIC: Source Verification & Fallback
             final_path = queued_file
             is_live = False
 
@@ -247,39 +291,42 @@ class Call:
                 n, link = await YouTube.video(vidid, True)
                 if n == 0: 
                     await app.send_message(original_chat_id, _["call_6"])
-                    return # Will trigger next
+                    return # Next
                 final_path = link
                 is_live = True
             elif "vid_" in queued_file or os.path.exists(queued_file):
                 if not os.path.exists(queued_file):
-                    # Auto-Redownload
+                    # Local file missing? Redownload!
                     msg = await app.send_message(original_chat_id, _["call_7"])
                     try:
                         final_path, _ = await YouTube.download(vidid, msg, videoid=True, video=is_video)
                         await msg.delete()
                     except:
                         await app.send_message(original_chat_id, _["call_6"])
-                        return 
+                        return # Next
 
             stream = build_stream(final_path, is_video, is_live)
             
             try:
                 await client.play(chat_id, stream)
             except Exception as e:
-                # 🛑 FAILSAFE DOWNLOAD
-                LOGGER(__name__).warning(f"Playback failed ({e}), forcing download...")
+                # 🛑 FINAL RESCUE: Force Download if Stream Fails
+                LOGGER(__name__).warning(f"Playback failed for {chat_id}, attempting Rescue Download...")
                 try:
-                    dl_msg = await app.send_message(original_chat_id, _["call_7"])
+                    dl_msg = await app.send_message(original_chat_id, "🔄 جاري إصلاح المصدر والتشغيل...")
                     new_path, _ = await YouTube.download(vidid, dl_msg, videoid=True, video=is_video)
                     await dl_msg.delete()
-                    check[0]["file"] = new_path # Update DB
+                    
+                    # Update DB
+                    check[0]["file"] = new_path
                     stream = build_stream(new_path, is_video, False)
                     await client.play(chat_id, stream)
-                except:
+                except Exception as final_e:
+                    LOGGER(__name__).error(f"Rescue failed: {final_e}")
                     await app.send_message(original_chat_id, _["call_6"])
                     return await self.stop_stream_internal(chat_id, client)
 
-            # Send UI
+            # Send UI (Non-blocking)
             asyncio.create_task(self.send_ui(chat_id, original_chat_id, vidid, title, user, track["dur"], streamtype, is_live, _))
 
     async def send_ui(self, chat_id, original_chat_id, vidid, title, user, duration, streamtype, is_live, _):
@@ -315,42 +362,6 @@ class Call:
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
         except: pass
-
-    async def stop_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        await self.stop_stream_internal(chat_id, client)
-
-    async def stop_stream_internal(self, chat_id: int, client):
-        await _aggressive_clean_(chat_id)
-        if chat_id in self.active_calls:
-            try: await client.leave_call(chat_id)
-            except: pass
-            self.active_calls.discard(chat_id)
-
-    async def force_stop_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        try:
-            check = db.get(chat_id)
-            if check: check.pop(0)
-        except: pass
-        await self.stop_stream_internal(chat_id, client)
-
-    # Standard Commands
-    async def pause_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        await client.pause(chat_id)
-
-    async def resume_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        await client.resume(chat_id)
-
-    async def mute_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        await client.mute(chat_id)
-
-    async def unmute_stream(self, chat_id: int):
-        client = await self.get_tgcalls(chat_id)
-        await client.unmute(chat_id)
 
     async def skip_stream(self, chat_id, link, video=None, image=None):
         client = await self.get_tgcalls(chat_id)
@@ -395,24 +406,30 @@ class Call:
             except: pass
 
     async def decorators(self):
-        async def unified_handler(client, update: Update):
-            chat_id = getattr(update, "chat_id", None)
-            if not chat_id: return
+        assistants = self.clients
+
+        async def unified_update_handler(client, update: Update):
+            if not getattr(update, "chat_id", None):
+                return
+            
+            chat_id = update.chat_id
 
             if isinstance(update, StreamEnded):
-                # Trigger Next using task
-                asyncio.create_task(self.change_stream(client, chat_id))
+                if update.stream_type == StreamEnded.Type.AUDIO:
+                    # Task to prevent blocking
+                    asyncio.create_task(self.change_stream(client, chat_id))
             
             elif isinstance(update, ChatUpdate):
-                if update.status in [ChatUpdate.Status.LEFT_CALL, ChatUpdate.Status.KICKED, ChatUpdate.Status.CLOSED_VOICE_CHAT]:
-                    await _aggressive_clean_(chat_id)
-                    if chat_id in self.active_calls:
-                        self.active_calls.discard(chat_id)
+                status = update.status
+                if (status & ChatUpdate.Status.LEFT_CALL) or \
+                   (status & ChatUpdate.Status.KICKED) or \
+                   (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
+                    await self.stop_stream(chat_id)
 
-        for assistant in self.clients:
+        for assistant in assistants:
             try:
                 if hasattr(assistant, 'on_update'):
-                    assistant.on_update()(unified_handler)
+                    assistant.on_update()(unified_update_handler)
             except: pass
 
 Hotty = Call()
