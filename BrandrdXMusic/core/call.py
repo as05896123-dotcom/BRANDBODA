@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Union, List, Dict, Any
 
 from pyrogram import Client
-from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant
+from pyrogram.errors import FloodWait, ChatAdminRequired, UserAlreadyParticipant, InviteHashExpired
 from pyrogram.types import InlineKeyboardMarkup
 
 # ============================================================
@@ -65,16 +65,16 @@ counter = {}
 def get_ffmpeg_flags(is_local: bool = False, live: bool = False) -> str:
     """
     Returns optimized FFMPEG flags.
-    Added -ac 2 -ar 48000 to fix NO SOUND issues.
+    Added volume boost and buffer fixes.
     """
     if is_local:
-        # 📂 LOCAL FILE FLAGS: Force Audio Format for Telegram
+        # 📂 LOCAL FILE FLAGS: Force Audio Format for Telegram + Speed
         return (
-            "-re "
             "-bg 0 "
-            "-max_muxing_queue_size 4096 "
-            "-ac 2 -ar 48000 "  # 🌟 FIX: Force Stereo 48kHz (Fixes Silence)
-            "-preset veryfast "
+            "-max_muxing_queue_size 9999 "
+            "-ac 2 -ar 48000 "  # 🌟 FIX: Force Stereo 48kHz
+            "-af volume=1.5 "   # 🔊 FIX: Volume Boost
+            "-preset ultrafast "
             "-vn " 
         )
     else:
@@ -83,8 +83,9 @@ def get_ffmpeg_flags(is_local: bool = False, live: bool = False) -> str:
             "-re -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
             "-reconnect_on_network_error 1 "
             "-bg 0 "
-            "-max_muxing_queue_size 4096 "
-            "-ac 2 -ar 48000 "  # 🌟 FIX: Force Stereo 48kHz
+            "-max_muxing_queue_size 9999 "
+            "-ac 2 -ar 48000 "
+            "-af volume=1.5 "
             "-headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)' "
             f"{'-tune zerolatency -preset ultrafast' if live else '-preset veryfast'}"
         )
@@ -203,10 +204,24 @@ class Call:
                 return client
         return self.clients[0]
 
-    # ================= 🛡️ ROBUST JOIN =================
+    # ================= 🛡️ ROBUST JOIN (FIXED) =================
 
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: bool = False, image: str = None):
         client = await self.get_tgcalls(chat_id)
+        
+        # 1️⃣: Force Join Assistant to Chat first
+        try:
+            await client.join_chat(chat_id)
+        except UserAlreadyParticipant:
+            pass
+        except (InviteHashExpired, Exception):
+            try:
+                userbot = await group_assistant(self, chat_id)
+                await app.add_chat_members(chat_id, userbot.me.id)
+            except:
+                pass 
+
+        # 2️⃣: Play Stream
         try:
             is_live = "live" in link or "m3u8" in link
             stream = build_stream(link, video, is_live)
@@ -362,7 +377,7 @@ class Call:
                     db[chat_id][0]["markup"] = "stream"
             except FloodWait as f:
                 LOGGER(__name__).warning(f"UI FloodWait: {f.value}s - Skipping UI update.")
-                await asyncio.sleep(f.value) # Just sleep, don't retry to avoid blocking logic
+                await asyncio.sleep(f.value) 
 
         except Exception as e:
             LOGGER(__name__).error(f"UI Error (Ignored): {e}")
@@ -448,6 +463,7 @@ class Call:
         except Exception as e:
              LOGGER(__name__).error(f"Speedup Error: {e}")
 
+    # ================= 🛡️ LOGGER STREAM CALL =================
     async def stream_call(self, link):
         assistant = await self.get_tgcalls(config.LOGGER_ID)
         try:
@@ -459,13 +475,12 @@ class Call:
 
     async def decorators(self):
         async def unified_handler(client, update: Update):
-            # 🛡️ FIX: IGNORE INVALID UPDATES (Prevent AttributeError)
-            # Only process updates that are strictly StreamEnded or ChatUpdate
+            # 🛡️ FIX: IGNORE INVALID UPDATES
             if not isinstance(update, (StreamEnded, ChatUpdate)):
                 return
 
             try:
-                # Use getattr safely to avoid crashing on malformed updates
+                # Use getattr safely
                 chat_id = getattr(update, "chat_id", None)
                 if not chat_id: return
 
