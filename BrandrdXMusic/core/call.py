@@ -52,47 +52,37 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# 🛡️ الحارس الذكي (Auto-Recovery & Caching)
-# =======================================================================
-async def delayed_auto_clean(popped_item):
-    try:
-        # الاحتفاظ بالملف 5 دقائق قبل الحذف
-        await asyncio.sleep(300)
-        await auto_clean(popped_item)
-    except:
-        pass
-
-# =======================================================================
-# 💎 المحرك الذهبي المتوازن (Golden Engine)
+# 🚀 الخلطة السحرية: سرعة + ثبات + جودة
 # =======================================================================
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStream:
-    # التعديلات الذهبية للثبات التام:
-    # 1. probesize 16M: كافية جداً للثبات ومش هتخنق السيرفر.
-    # 2. bufsize 8192k: مخزن ممتاز يمنع التقطيع ويحافظ على الرامات.
-    # 3. volume=1.5: صوت عالي ونقي.
-    # 4. preset ultrafast: أسرع استجابة.
+    # 1. -re: القراءة بالسرعة الطبيعية (أساس الثبات).
+    # 2. -preset ultrafast: أسرع معالجة ممكنة (يقلل استخدام المعالج ويسرع البدء).
+    # 3. -tune zerolatency: استجابة فورية للبث.
+    # 4. -bufsize 8192k: مخزن 8 ميجا (مانع التقطيع الأول).
+    # 5. -max_muxing_queue_size 2048: طابور بيانات إضافي للأمان.
+    # 6. -http_keepalive 1: منع انقطاع الاتصال مع المصدر.
+    # 7. -af "volume=1.6": صوت عالي جداً وواضح.
     
-    golden_filters = (
+    magic_filters = (
         '-re '
         '-preset ultrafast '
         '-tune zerolatency '
-        '-af "volume=1.5" '
-        '-probesize 16M '
-        '-analyzeduration 10000000 '
         '-bufsize 8192k '
-        '-max_muxing_queue_size 1024 '
+        '-max_muxing_queue_size 2048 '
+        '-http_keepalive 1 '
+        '-af "volume=1.6" '
         '-ac 2 '
         '-ar 48000'
     )
     
-    final_ffmpeg = f"{ffmpeg} {golden_filters}" if ffmpeg else golden_filters
+    final_ffmpeg = f"{ffmpeg} {magic_filters}" if ffmpeg else magic_filters
 
     if video:
         return MediaStream(
             media_path=path,
             audio_parameters=AudioQuality.STUDIO,
-            video_parameters=VideoQuality.HD_720p, # 720p هو الأكثر استقراراً للسيرفرات المتوسطة
+            video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.REQUIRED,
             ffmpeg_parameters=final_ffmpeg,
@@ -110,18 +100,18 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None) -> MediaStr
 async def _clear_(chat_id: int) -> None:
     try:
         if popped := db.pop(chat_id, None):
-            asyncio.create_task(delayed_auto_clean(popped))
-        
+            await auto_clean(popped)
         await remove_active_video_chat(chat_id)
         await remove_active_chat(chat_id)
         await set_loop(chat_id, 0)
     except:
         pass
     finally:
+        # 🧹 تنظيف فوري للرامات عشان البوت يفضل سريع
         gc.collect()
 
 # =======================================================================
-# 🚀 CORE CLASS
+# 🤖 CORE CLASS (نفس كودك الأصلي الشغال)
 # =======================================================================
 
 class Call:
@@ -156,7 +146,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Golden Stable Engine...")
+        LOGGER(__name__).info("🚀 Starting Turbo-Charged Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -192,13 +182,9 @@ class Call:
         client = await self.get_tgcalls(chat_id)
         await _clear_(chat_id)
         if chat_id in self.active_calls:
-            try: 
-                await client.leave_call(chat_id)
-            except Exception: 
-                # تجاهل خطأ Call not found لأنه يعني أن المكالمة انتهت بالفعل
-                pass
-            finally: 
-                self.active_calls.discard(chat_id)
+            try: await client.leave_call(chat_id)
+            except: pass
+            finally: self.active_calls.discard(chat_id)
 
     async def force_stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
@@ -210,12 +196,9 @@ class Call:
         await remove_active_chat(chat_id)
         await _clear_(chat_id)
         if chat_id in self.active_calls:
-            try: 
-                await client.leave_call(chat_id)
-            except Exception: 
-                pass
-            finally: 
-                self.active_calls.discard(chat_id)
+            try: await client.leave_call(chat_id)
+            except: pass
+            finally: self.active_calls.discard(chat_id)
 
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
         client = await self.get_tgcalls(chat_id)
@@ -255,15 +238,11 @@ class Call:
             else:
                 loop -= 1
                 await set_loop(chat_id, loop)
-            
-            if popped: 
-                asyncio.create_task(delayed_auto_clean(popped))
-            
+            if popped: await auto_clean(popped)
             if not check:
                 await _clear_(chat_id)
                 if chat_id in self.active_calls:
-                    try: 
-                        await client.leave_call(chat_id)
+                    try: await client.leave_call(chat_id)
                     except: pass
                     finally: self.active_calls.discard(chat_id)
                 return
