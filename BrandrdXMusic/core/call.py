@@ -365,7 +365,7 @@ class Call:
                 elif videoid == "soundcloud":
                     run = await app.send_photo(
                         chat_id=original_chat_id,
-                        photo=config.SOUNCLOUD_IMG_URL,
+                        photo=config.SOUNDCLOUD_IMG_URL,
                         caption=_["stream_1"].format(config.SUPPORT_CHAT, title[:23], check[0]["dur"], user),
                         reply_markup=InlineKeyboardMarkup(get_btn("soundcloud")),
                     )
