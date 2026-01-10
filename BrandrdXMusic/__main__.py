@@ -1,3 +1,7 @@
+import install_lib
+# تشغيل سكريبت تثبيت وإصلاح المكتبة فوراً
+install_lib.setup_library()
+
 import asyncio
 import importlib
 from sys import exit
