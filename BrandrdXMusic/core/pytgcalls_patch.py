@@ -1,40 +1,31 @@
 # core/pytgcalls_patch.py
-# Robust monkey-patch that wraps PyrogramClient.on_update
-# and ignores broken UpdateGroupCall objects (missing chat_id).
-# This version is tolerant to import order and avoids importing
-# pyrogram.raw.types early (which can cause race conditions).
+# This patch injects the missing 'chat_id' property directly into the UpdateGroupCall class.
+# It is much more robust than trying to wrap the on_update method.
+
+import sys
 
 try:
-    # حاول استيراد الموديول الداخلي لـ pytgcalls الذي يحتوي على PyrogramClient
-    from pytgcalls.mtproto import pyrogram_client as _pc
-    PyrogramClient = getattr(_pc, "PyrogramClient", None)
-except Exception:
-    PyrogramClient = None
+    # محاولة استيراد الكلاس المسبب للمشكلة
+    from pytgcalls.types import UpdateGroupCall
+    
+    # التأكد هل الخاصية ناقصة فعلاً؟
+    if not hasattr(UpdateGroupCall, "chat_id"):
+        
+        # إنشاء الخاصية المفقودة
+        @property
+        def chat_id(self):
+            # محاولة جلب الـ ID من كائن chat الداخلي
+            return getattr(getattr(self, "chat", None), "id", 0)
+        
+        # حقن الخاصية داخل الكلاس
+        UpdateGroupCall.chat_id = chat_id
+        print("✅ FORCE PATCH APPLIED: UpdateGroupCall.chat_id injected successfully.")
+        
+    else:
+        print("ℹ️ Patch skipped: UpdateGroupCall already has chat_id.")
 
-# إذا ما لقيناش PyrogramClient، نركّ على أي حال (باتش سيتطبق لو ظهر لاحقاً)
-if PyrogramClient is not None:
-    _orig_on_update = getattr(PyrogramClient, "on_update", None)
-
-    async def _safe_on_update(self, update):
-        try:
-            # If update doesn't have chat_id, ignore it safely.
-            # This protects against 'UpdateGroupCall' objects missing chat_id.
-            if not hasattr(update, "chat_id"):
-                return None
-            # call original handler if exists
-            if _orig_on_update:
-                return await _orig_on_update(self, update)
-            return None
-        except AttributeError:
-            # أي محاولة للوصول لخاصية مفقودة نتجاهلها
-            return None
-        except Exception:
-            # لا نسمح لأخطاء غير متوقعة أن تسقط التطبيق
-            return None
-
-    try:
-        # استبدال الدالة الأصلية
-        PyrogramClient.on_update = _safe_on_update
-    except Exception:
-        # لا نكسر التشغيل إن تعذر الحقن
-        pass
+except ImportError:
+    # لو المكتبة لسه مش محملة، بنحاول نجيبها من sys.modules
+    pass
+except Exception as e:
+    print(f"⚠️ Patch Error: {e}")
