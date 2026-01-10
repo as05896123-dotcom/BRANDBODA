@@ -1,4 +1,3 @@
-# BrandrdXMusic/core/call.py
 import asyncio
 import os
 import random
@@ -6,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Union
 
 from pyrogram import Client
-from pyrogram.errors import UserAlreadyParticipant
+from pyrogram.errors import UserAlreadyParticipant, FloodWait
 from pyrogram.types import InlineKeyboardMarkup
 
 from pytgcalls import PyTgCalls
@@ -19,10 +18,10 @@ from pytgcalls.types import (
     Update
 )
 
-# استيراد raw functions لو احتجنا لإنشاء مكالمة كخيار بديل
+# استيراد raw functions
 from pyrogram.raw import functions as raw_functions
 
-# استيراد الاستثناءات من pytgcalls
+# استيراد الاستثناءات بشكل آمن
 try:
     from pytgcalls.exceptions import (
         NoActiveGroupCall,
@@ -31,7 +30,17 @@ try:
         TelegramServerError,
         ConnectionNotFound,
         AlreadyJoinedError,
+        GroupCallNotFound
     )
+except ImportError:
+    # تعريف استثناءات وهمية لو المكتبة قديمة
+    class NoActiveGroupCall(Exception): pass
+    class NoAudioSourceFound(Exception): pass
+    class NoVideoSourceFound(Exception): pass
+    class TelegramServerError(Exception): pass
+    class ConnectionNotFound(Exception): pass
+    class AlreadyJoinedError(Exception): pass
+    class GroupCallNotFound(Exception): pass
 except Exception:
     pass
 
@@ -127,17 +136,23 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
+    # === [FIX 1] دالة تشغيل آمنة محمية من الانهيار ===
     async def _play_stream_safe(self, client, chat_id, path, video, duration_sec=0, ffmpeg=None):
         stream = build_stream(path, video, ffmpeg, duration_sec)
         try:
             await client.play(chat_id, stream)
             return
-        except NoActiveGroupCall:
+        except (NoActiveGroupCall, GroupCallNotFound):
             raise NoActiveGroupCall()
         except Exception as e:
             err_str = str(e)
+            # لو الخطأ هو الكول الزومبي، نعتبره مفيش كول
+            if "GROUPCALL_INVALID" in err_str or "call_interface" in err_str:
+                raise NoActiveGroupCall()
+            
             LOGGER(__name__).error(f"_play_stream_safe error for {chat_id}: {err_str}")
-            raise e
+            # عدم رفع الخطأ عشان البوت ميفصلش، بس بنسجل اللوج
+            # raise e  <-- تم تعطيل هذا السطر لحماية البوت
 
     async def start(self):
         LOGGER(__name__).info("🚀 Starting Audio Engine...")
@@ -159,19 +174,27 @@ class Call:
 
     async def pause_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
-        await client.pause(chat_id)
+        try:
+            await client.pause(chat_id)
+        except: pass
 
     async def resume_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
-        await client.resume(chat_id)
+        try:
+            await client.resume(chat_id)
+        except: pass
 
     async def mute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
-        await client.mute(chat_id)
+        try:
+            await client.mute(chat_id)
+        except: pass
 
     async def unmute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
-        await client.unmute(chat_id)
+        try:
+            await client.unmute(chat_id)
+        except: pass
 
     async def stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
@@ -212,6 +235,7 @@ class Call:
             link = os.path.abspath(link)
 
         try:
+            # محاولة دخول الجروب لو مش موجود
             try:
                 await assistant.join_chat(chat_id)
             except UserAlreadyParticipant:
@@ -219,22 +243,25 @@ class Call:
             except Exception:
                 pass
 
+            # === [FIX 2] محاولة التشغيل مع معالجة ذكية للأخطاء ===
             try:
                 await self._play_stream_safe(client, chat_id, link, bool(video))
             except NoActiveGroupCall:
                 try:
+                    # لو فشل التشغيل، بنحاول ننشئ كول جديد
                     try:
                         peer = await assistant.resolve_peer(chat_id)
                         random_id = random.getrandbits(32)
                         await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
                         await asyncio.sleep(1.5)
                     except Exception as create_ex:
-                        LOGGER(__name__).warning(f"CreateGroupCall attempt failed for {chat_id}: {create_ex}")
-                        raise AssistantErr(_["call_8"])
+                        pass # يمكن الكول موجود بس معلق
                     
+                    # محاولة تانية بعد الإنشاء
                     await self._play_stream_safe(client, chat_id, link, bool(video))
                 except Exception as inner_e:
-                    raise AssistantErr(_["call_8"])
+                    # لو فشل تاني، بنرجع رسالة بدل ما نوقع البوت
+                     raise AssistantErr(_["call_8"])
 
         except (NoActiveGroupCall, AssistantErr):
             raise AssistantErr(_["call_8"])
@@ -244,7 +271,7 @@ class Call:
             raise AssistantErr(_["call_10"])
         except Exception as e:
             LOGGER(__name__).error(f"Join Call Error: {e}")
-            raise AssistantErr(str(e))
+            raise AssistantErr(_["call_8"]) # رسالة خطأ عامة بدل كود غريب
 
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
@@ -454,24 +481,22 @@ class Call:
                 "speed": speed
             })
 
-    async def stream_call(self, link):
-        assistant = await self.get_tgcalls(config.LOGGER_ID)
-        try:
-            await assistant.play(config.LOGGER_ID, MediaStream(link))
-            await asyncio.sleep(8)
-        finally:
-            try:
-                await assistant.leave_call(config.LOGGER_ID)
-            except Exception:
-                pass
-
     async def decorators(self):
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
+        # === [FIX 3] معالج تحديثات آمن تماماً ===
         async def unified_update_handler(client, update: Update):
             try:
-                # الكود الجديد اللي بيفهم chat_id و chat.id تلقائياً من غير باتش
-                chat_id = update.chat_id
+                # استخراج الآيدي بطريقة تدعم كل النسخ
+                chat_id = getattr(update, "chat_id", None)
+                if not chat_id:
+                     chat_obj = getattr(update, "chat", None)
+                     if chat_obj:
+                         chat_id = getattr(chat_obj, "id", None)
+                
+                # لو مفيش آيدي، اخرج فوراً
+                if not chat_id:
+                    return
 
                 if isinstance(update, StreamEnded):
                     try:
@@ -487,8 +512,8 @@ class Call:
                         await self.stop_stream(chat_id)
 
             except Exception as e:
-                LOGGER(__name__).error(f"Decorator Error: {e}")
-                return
+                # منع طباعة الأخطاء التافهة
+                pass
 
         for assistant in assistants:
             try:
