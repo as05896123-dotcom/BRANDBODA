@@ -135,7 +135,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
 
     # استخدام High بدلاً من Studio إذا كان الملف محلياً لتجنب مشاكل فك التشفير
     # Studio يتطلب مصدر قوي جداً، High أكثر استقراراً للملفات المحملة
-    audio_params = AudioQuality.Studio
+    audio_params = AudioQuality.High
     
     if video:
         video_params = get_video_quality(duration, is_live=is_url)
