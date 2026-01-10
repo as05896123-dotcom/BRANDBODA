@@ -1,7 +1,6 @@
 import asyncio
 import os
 import time
-import importlib
 from datetime import datetime, timedelta
 from typing import Union, Dict
 
@@ -26,29 +25,6 @@ except ImportError:
         TelegramServerError = Exception
         ConnectionNotFound = Exception
 
-# =======================================================================
-# 🛡️ MONKEY PATCH: حماية البوت من الانهيار بسبب تحديثات المكتبة
-# =======================================================================
-try:
-    pyrogram_client_module = importlib.import_module("pytgcalls.mtproto.pyrogram_client")
-    TargetClient = pyrogram_client_module.PyrogramClient
-    original_on_update = TargetClient.on_update
-
-    async def patched_on_update(self, client, update):
-        if not hasattr(update, 'chat_id'):
-            return
-        try:
-            await original_on_update(self, client, update)
-        except Exception:
-            pass
-
-    TargetClient.on_update = patched_on_update
-except ImportError:
-    pass
-
-# =======================================================================
-# 📦 IMPORTS
-# =======================================================================
 import config
 from strings import get_string
 from BrandrdXMusic import LOGGER, YouTube, app
@@ -526,6 +502,7 @@ class Call:
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update):
+            # الحماية الداخلية ضد انهيار ChatID
             if not getattr(update, "chat_id", None):
                 return
             
