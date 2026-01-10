@@ -4,20 +4,19 @@ import subprocess
 import shutil
 import compileall
 
-# رجعنا الاسم setup_library عشان البوت يلاقيه
 def setup_library():
     LIB_NAME = "pytgcalls"
     cwd = os.getcwd()
     lib_path = os.path.join(cwd, LIB_NAME)
 
-    # 1. تنظيف المكتبة القديمة
+    # 1. تنظيف المكتبة
     print("🧹 Cleaning library...")
     if os.path.exists(lib_path):
         try:
             shutil.rmtree(lib_path)
         except: pass
 
-    # 2. تحميل المكتبة (Fresh Install)
+    # 2. تحميل المكتبة
     print("⏳ Installing PyTgCalls v2.2.8...")
     try:
         subprocess.check_call([
@@ -34,16 +33,15 @@ def setup_library():
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # 3. كتابة الكود السليم (بدون Import MTProtoClient)
+    # 3. كتابة الكود السليم (باستخدام Absolute Imports)
     print("🔧 Writing fixed client code...")
     target_file = os.path.join(lib_path, "mtproto", "pyrogram_client.py")
     
-    # لاحظ: شلنا السطر اللي كان بيعمل المشكلة وشلنا (MTProtoClient) من الكلاس
-    # وضفنا الديكوريتورز عشان البوت يشتغل صح
+    # التغيير هنا: استخدمنا pytgcalls.types مباشرة
     safe_code = r'''
 from pyrogram import Client
-from ...types import Update
-from ...types import GroupCall
+from pytgcalls.types import Update
+from pytgcalls.types import GroupCall
 import logging
 
 class PyrogramClient:
@@ -78,7 +76,7 @@ class PyrogramClient:
     def set_on_update(self, func):
         self._on_update = func
 
-    # ربط الديكوريتورز بالمكتبة الأم
+    # Decorators Binding
     @property
     def on_message(self):
         return self._client.on_message
@@ -106,13 +104,12 @@ class PyrogramClient:
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(safe_code)
 
-    # 4. تعديل الملف الأم عشان يقبل الكود الجديد (تجاوز فحص النوع)
+    # 4. تعديل الملف الأم
     mtproto_file = os.path.join(lib_path, "mtproto", "mtproto_client.py")
     if os.path.exists(mtproto_file):
         with open(mtproto_file, "r") as f:
             content = f.read()
         
-        # إلغاء شرط الوراثة
         if "isinstance(client, MTProtoClient)" in content:
             new_content = content.replace("isinstance(client, MTProtoClient)", "True")
             with open(mtproto_file, "w") as f:
