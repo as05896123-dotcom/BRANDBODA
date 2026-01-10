@@ -2,15 +2,17 @@
 import asyncio
 import sys
 from SafoneAPI import SafoneAPI
+
 from BrandrdXMusic.core.bot import Hotty
-from BrandrdXMusic.core.userbot import Userbot
 from BrandrdXMusic.core.dir import dirr
 from BrandrdXMusic.core.git import git
+from BrandrdXMusic.core.userbot import Userbot
 from BrandrdXMusic.misc import dbb, heroku
 from .logging import LOGGER
 
 # ====================================================
-# 🚀 PERFORMANCE BOOST: تفعيل UVLOOP (من Alexa)
+# 🚀 PERFORMANCE BOOST: تفعيل UVLOOP (مثل Alexa)
+# بيخلي استجابة البوت أسرع بكتير
 # ====================================================
 if sys.platform != "win32":
     try:
@@ -21,37 +23,20 @@ if sys.platform != "win32":
         LOGGER(__name__).warning("⚠️ Uvloop not found, using default asyncio.")
 
 # ====================================================
-# 🛠️ SAFE PATCH: حماية إضافية للكراش
-# ====================================================
-try:
-    from pytgcalls.types import UpdateGroupCall
-    if not hasattr(UpdateGroupCall, "chat_id"):
-        UpdateGroupCall.chat_id = property(lambda self: getattr(getattr(self, "chat", None), "id", 0))
-except Exception:
-    pass
-
-# ====================================================
 # 📂 INITIALIZATION: تهيئة النظام
 # ====================================================
 dirr()   # تنظيف المجلدات
 git()    # فحص التحديثات
-dbb()    # قاعدة البيانات
+dbb()    # تحميل قاعدة البيانات
 heroku() # إعدادات هيروكو
 
 # ====================================================
-# 🤖 CLIENTS: لم ننشئهم بعد، فقط دالة لتهيئتهم عند الحاجة
+# 🤖 CLIENTS: التعريف المباشر (زي Annie و Alexa)
+# لازم يتعرفوا هنا فوراً عشان باقي الملفات تشوفهم
 # ====================================================
-app = None
-userbot = None
-api = None
-
-def create_clients():
-    """Create and return the bot, userbot and api instances."""
-    global app, userbot, api
-    app = Hotty()
-    userbot = Userbot()
-    api = SafoneAPI()
-    return app, userbot, api
+app = Hotty()
+api = SafoneAPI()
+userbot = Userbot()
 
 # ====================================================
 # 🎵 PLATFORMS: منصات التشغيل
@@ -65,5 +50,3 @@ Spotify = SpotifyAPI()
 Resso = RessoAPI()
 Telegram = TeleAPI()
 YouTube = YouTubeAPI()
-
-APP = "Systumm_music_bot"
