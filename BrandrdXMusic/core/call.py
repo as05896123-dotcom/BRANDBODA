@@ -52,33 +52,31 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# 🗂️ SMART CACHE SYSTEM (6 Minutes TTL)
+# 🗂️ SMART CACHE SYSTEM
 # =======================================================================
 
 class SmartCache:
     def __init__(self):
         self.cache: Dict[str, Dict] = {}
-        self.ttl = 360  # 6 Minutes in seconds
+        self.ttl = 360  # 6 Minutes
 
     def get(self, video_id: str) -> str:
-        """Retrieve file path if exists and valid"""
-        self.cleanup()  # Lazy cleanup on access
+        self.cleanup()
         if video_id in self.cache:
             entry = self.cache[video_id]
             if time.time() - entry['timestamp'] < self.ttl:
-                LOGGER(__name__).info(f"🚀 Cache Hit: {video_id}")
-                return entry['path']
+                if os.path.exists(entry['path']):
+                    LOGGER(__name__).info(f"🚀 Cache Hit: {video_id}")
+                    return entry['path']
         return None
 
     def store(self, video_id: str, path: str):
-        """Store file path with timestamp"""
         self.cache[video_id] = {
-            'path': path,
+            'path': os.path.abspath(path),
             'timestamp': time.time()
         }
 
     def cleanup(self):
-        """Remove expired files physically and from dict"""
         now = time.time()
         to_remove = []
         for vid, entry in self.cache.items():
@@ -87,21 +85,18 @@ class SmartCache:
                 if os.path.exists(entry['path']):
                     try:
                         os.remove(entry['path'])
-                        LOGGER(__name__).info(f"🗑️ Cache Cleaned: {entry['path']}")
-                    except Exception as e:
-                        LOGGER(__name__).error(f"Cache Cleanup Error: {e}")
-        
+                    except: pass
         for vid in to_remove:
             del self.cache[vid]
 
 music_cache = SmartCache()
 
 # =======================================================================
-# ⚙️ STREAM CONFIGURATION & FFmpeg
+# ⚙️ STREAM CONFIGURATION & FFmpeg (FIXED)
 # =======================================================================
 
-# إعدادات FFmpeg الصارمة لمنع التقطيع وتقليل التأخير
-FFMPEG_OPTIONS = (
+# إعدادات الروابط الخارجية (Live/URL)
+REMOTE_FFMPEG = (
     "-re "
     "-reconnect 1 "
     "-reconnect_streamed 1 "
@@ -112,28 +107,38 @@ FFMPEG_OPTIONS = (
     "-loglevel error"
 )
 
+# إعدادات الملفات المحلية (تم إزالة خيارات الاتصال لتجنب الخطأ)
+LOCAL_FFMPEG = (
+    "-nostdin "
+    "-fflags nobuffer "
+    "-flags low_delay "
+    "-loglevel error"
+)
+
 def get_video_quality(duration_seconds: int = 0, is_live: bool = False) -> VideoQuality:
-    """
-    Smart Quality Selector:
-    - Live or Long (> 10 mins) -> 720p (Stability)
-    - Short/Light -> 1080p (Quality)
-    """
     if is_live:
         return VideoQuality.HD_720p
-    if duration_seconds > 600: # أكثر من 10 دقائق
+    if duration_seconds > 600: 
         return VideoQuality.HD_720p
     return VideoQuality.FHD_1080p
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0) -> MediaStream:
-    combined_ffmpeg = FFMPEG_OPTIONS
+    # تحديد نوع الملف لتطبيق الإعدادات المناسبة
+    is_url = path.startswith("http")
+    
+    base_ffmpeg = REMOTE_FFMPEG if is_url else LOCAL_FFMPEG
+    
     if ffmpeg:
-        combined_ffmpeg += f" {ffmpeg}"
+        combined_ffmpeg = f"{base_ffmpeg} {ffmpeg}"
+    else:
+        combined_ffmpeg = base_ffmpeg
 
-    audio_params = AudioQuality.STUDIO  # OPUS High Quality
+    # استخدام High بدلاً من Studio إذا كان الملف محلياً لتجنب مشاكل فك التشفير
+    # Studio يتطلب مصدر قوي جداً، High أكثر استقراراً للملفات المحملة
+    audio_params = AudioQuality.HIGH 
     
     if video:
-        # اختيار الجودة الذكي
-        video_params = get_video_quality(duration)
+        video_params = get_video_quality(duration, is_live=is_url)
         return MediaStream(
             media_path=path,
             audio_parameters=audio_params,
@@ -146,7 +151,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
         return MediaStream(
             media_path=path,
             audio_parameters=audio_params,
-            video_parameters=VideoQuality.HD_720p, # Dummy for audio-only but keeps stream stable
+            video_parameters=VideoQuality.HD_720p,
             audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
             ffmpeg_parameters=combined_ffmpeg,
@@ -198,7 +203,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Advanced Music Engine (Anti-Lag Enabled)...")
+        LOGGER(__name__).info("🚀 Starting Advanced Music Engine (Stable Mode)...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -257,7 +262,10 @@ class Call:
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         
-        # Default duration 0 for initial join implies standard quality fallback
+        # Ensure path is string and absolute if local
+        if not link.startswith("http"):
+            link = os.path.abspath(link)
+
         stream = build_stream(link, video=bool(video))
 
         try:
@@ -265,6 +273,8 @@ class Call:
         except (NoActiveGroupCall, ChatAdminRequired):
             raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
+            # This specific error usually means path is wrong or FFmpeg failed
+            LOGGER(__name__).error(f"FFmpeg/Source Error for path: {link}")
             raise AssistantErr(_["call_11"])
         except (TelegramServerError, ConnectionNotFound):
             raise AssistantErr(_["call_10"])
@@ -316,7 +326,6 @@ class Call:
         streamtype = check[0]["streamtype"]
         videoid = check[0]["vidid"]
         
-        # Extract Duration seconds safely
         try:
             duration_sec = check[0].get("seconds", 0)
         except:
@@ -337,12 +346,10 @@ class Call:
             return stream_markup(_, vid_id, chat_id)
 
         try:
-            # 1. LIVE STREAM HANDLING
             if "live_" in queued:
                 n, link = await YouTube.video(videoid, True)
                 if n == 0: return await app.send_message(original_chat_id, text=_["call_6"])
 
-                # Live is always considered 720p for stability
                 stream = build_stream(link, video, duration=0) 
                 await client.play(chat_id, stream)
                 
@@ -356,21 +363,19 @@ class Call:
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
 
-            # 2. YOUTUBE VIDEO/AUDIO (CACHED)
             elif "vid_" in queued:
                 mystic = await app.send_message(original_chat_id, _["call_7"])
                 
-                # --- CACHE LOGIC START ---
                 file_path = music_cache.get(videoid)
                 if not file_path:
                     try: 
                         file_path, direct = await YouTube.download(videoid, mystic, videoid=True, video=video)
-                        # Store in cache
+                        # تحويل المسار لمسار مطلق للتأكد
+                        file_path = os.path.abspath(file_path)
                         music_cache.store(videoid, file_path)
                     except: 
                         return await mystic.edit_text(_["call_6"])
-                # --- CACHE LOGIC END ---
-
+                
                 stream = build_stream(file_path, video, duration=duration_sec)
                 await client.play(chat_id, stream)
 
@@ -385,7 +390,6 @@ class Call:
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
 
-            # 3. M3U8 / INDEX FILES
             elif "index_" in queued:
                 stream = build_stream(videoid, video, duration=duration_sec)
                 await client.play(chat_id, stream)
@@ -399,7 +403,6 @@ class Call:
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
 
-            # 4. DIRECT LINKS (Telegram Audio/Video or SoundCloud)
             else:
                 stream = build_stream(queued, video, duration=duration_sec)
                 await client.play(chat_id, stream)
@@ -447,26 +450,29 @@ class Call:
                     
         except Exception as e:
             LOGGER(__name__).error(f"Play Error: {e}")
-            # Auto-skip mechanism on error
             try:
-                await app.send_message(original_chat_id, text=f"⚠️ Error playing track, skipping to next... ({e})")
+                # إذا فشل التشغيل، ننتقل للتالي فوراً بدون انتظار
                 await self.change_stream(client, chat_id)
             except:
                 pass
 
     async def skip_stream(self, chat_id, link, video=None, image=None):
         client = await self.get_tgcalls(chat_id)
+        if not link.startswith("http"):
+            link = os.path.abspath(link)
         stream = build_stream(link, video=bool(video))
         await client.play(chat_id, stream)
 
     async def seek_stream(self, chat_id, file_path, to_seek, duration, mode):
         client = await self.get_tgcalls(chat_id)
+        file_path = os.path.abspath(file_path)
         ffmpeg = f"-ss {to_seek} -to {duration}"
         stream = build_stream(file_path, video=(mode == "video"), ffmpeg=ffmpeg)
         await client.play(chat_id, stream)
 
     async def speedup_stream(self, chat_id, file_path, speed, playing):
         client = await self.get_tgcalls(chat_id)
+        file_path = os.path.abspath(file_path)
         base = os.path.basename(file_path)
         chatdir = os.path.join(os.getcwd(), "playback", str(speed))
         os.makedirs(chatdir, exist_ok=True)
@@ -510,7 +516,6 @@ class Call:
                 if update.stream_type == StreamEnded.Type.AUDIO:
                     try: await self.change_stream(client, chat_id)
                     except Exception as e: 
-                        LOGGER(__name__).error(f"Stream Ended Error: {e}")
                         pass
             
             elif isinstance(update, ChatUpdate):
