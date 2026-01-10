@@ -33,15 +33,14 @@ def setup_library():
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # 3. كتابة الكود السليم (باستخدام Absolute Imports)
+    # 3. كتابة الكود السليم (بدون GroupCall)
     print("🔧 Writing fixed client code...")
     target_file = os.path.join(lib_path, "mtproto", "pyrogram_client.py")
     
-    # التغيير هنا: استخدمنا pytgcalls.types مباشرة
+    # الكود المعدل: شلنا استدعاء GroupCall لأنه مش موجود ومش ضروري
     safe_code = r'''
 from pyrogram import Client
 from pytgcalls.types import Update
-from pytgcalls.types import GroupCall
 import logging
 
 class PyrogramClient:
@@ -66,7 +65,8 @@ class PyrogramClient:
     async def get_input_entity(self, peer):
         return await self._client.resolve_peer(peer)
 
-    def chat_id(self, chat: GroupCall):
+    # شلنا الـ Type Hint (: GroupCall) عشان ميعملش Error
+    def chat_id(self, chat):
         return int(f"-100{chat.id}")
 
     async def set_params(self, chats: dict):
