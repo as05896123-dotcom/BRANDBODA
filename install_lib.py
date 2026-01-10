@@ -4,19 +4,20 @@ import subprocess
 import shutil
 import compileall
 
-def final_fix():
+# رجعنا الاسم setup_library عشان البوت يلاقيه
+def setup_library():
     LIB_NAME = "pytgcalls"
     cwd = os.getcwd()
     lib_path = os.path.join(cwd, LIB_NAME)
 
-    # 1. تنظيف سريع
+    # 1. تنظيف المكتبة القديمة
     print("🧹 Cleaning library...")
     if os.path.exists(lib_path):
         try:
             shutil.rmtree(lib_path)
         except: pass
 
-    # 2. تحميل المكتبة
+    # 2. تحميل المكتبة (Fresh Install)
     print("⏳ Installing PyTgCalls v2.2.8...")
     try:
         subprocess.check_call([
@@ -38,6 +39,7 @@ def final_fix():
     target_file = os.path.join(lib_path, "mtproto", "pyrogram_client.py")
     
     # لاحظ: شلنا السطر اللي كان بيعمل المشكلة وشلنا (MTProtoClient) من الكلاس
+    # وضفنا الديكوريتورز عشان البوت يشتغل صح
     safe_code = r'''
 from pyrogram import Client
 from ...types import Update
@@ -76,6 +78,15 @@ class PyrogramClient:
     def set_on_update(self, func):
         self._on_update = func
 
+    # ربط الديكوريتورز بالمكتبة الأم
+    @property
+    def on_message(self):
+        return self._client.on_message
+
+    @property
+    def on_deleted_messages(self):
+        return self._client.on_deleted_messages
+
     async def on_update(self, update: Update):
         if not hasattr(self, '_on_update'): return
         chats = self._chats
@@ -90,32 +101,26 @@ class PyrogramClient:
         except: return
 '''
     
-    # نتأكد إن المجلد موجود قبل الكتابة
     os.makedirs(os.path.dirname(target_file), exist_ok=True)
     
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(safe_code)
 
-    # 4. تعديل الملف الأم عشان يقبل الكود الجديد
+    # 4. تعديل الملف الأم عشان يقبل الكود الجديد (تجاوز فحص النوع)
     mtproto_file = os.path.join(lib_path, "mtproto", "mtproto_client.py")
     if os.path.exists(mtproto_file):
         with open(mtproto_file, "r") as f:
             content = f.read()
-        # إلغاء فحص النوع عشان ميعترضش على الكلاس المعدل
-        new_content = content.replace("isinstance(client, MTProtoClient)", "True")
-        with open(mtproto_file, "w") as f:
-            f.write(new_content)
-
-    # 5. ربط الديكوريتورز (خطوة مهمة جداً عشان البوت يحس بالرسائل)
-    # بنضيف كود الربط في نهاية ملف pyrogram_client.py اللي كتبناه
-    with open(target_file, "a", encoding="utf-8") as f:
-        f.write("\n    # Decorators Binding\n")
-        f.write("    @property\n    def on_message(self):\n        return self._client.on_message\n")
-        f.write("    @property\n    def on_deleted_messages(self):\n        return self._client.on_deleted_messages\n")
+        
+        # إلغاء شرط الوراثة
+        if "isinstance(client, MTProtoClient)" in content:
+            new_content = content.replace("isinstance(client, MTProtoClient)", "True")
+            with open(mtproto_file, "w") as f:
+                f.write(new_content)
 
     print("🔄 Compiling...")
     compileall.compile_dir(lib_path, force=True)
     print("🚀 DONE! Restart Bot.")
 
 if __name__ == "__main__":
-    final_fix()
+    setup_library()
