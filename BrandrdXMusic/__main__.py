@@ -1,68 +1,96 @@
+# ===============================
+# 🔥 IMPORTANT BOOT ORDER 🔥
+# ===============================
+# لازم الباتش يتحمّل قبل أي حاجة
+try:
+    import BrandrdXMusic.core.pytgcalls_patch  # noqa
+except Exception:
+    try:
+        import core.pytgcalls_patch  # noqa
+    except Exception:
+        pass
+
 import asyncio
 import importlib
 from pyrogram import idle
-from pytgcalls.exceptions import NoActiveGroupCall
 
 import config
 from BrandrdXMusic import LOGGER, app, userbot
-from BrandrdXMusic.core.call import Hotty
+from BrandrdXMusic.core.call import Call  # ✅ كلاس المكالمات الصح
 from BrandrdXMusic.misc import sudo
 from BrandrdXMusic.plugins import ALL_MODULES
 from BrandrdXMusic.utils.database import get_banned_users, get_gbanned
 from config import BANNED_USERS
 
-# دالة التشغيل الرئيسية
+
+call = Call()  # ✅ instance واحد فقط
+
+
 async def init():
-    if (
-        not config.STRING1
-        and not config.STRING2
-        and not config.STRING3
-        and not config.STRING4
-        and not config.STRING5
-    ):
+    # ===============================
+    # Assistant check
+    # ===============================
+    if not any([
+        config.STRING1,
+        config.STRING2,
+        config.STRING3,
+        config.STRING4,
+        config.STRING5,
+    ]):
         LOGGER(__name__).error("Assistant client variables not defined, exiting...")
         return
 
     await sudo()
+
+    # ===============================
+    # Load bans
+    # ===============================
     try:
-        users = await get_gbanned()
-        for user_id in users:
-            BANNED_USERS.add(user_id)
-        users = await get_banned_users()
-        for user_id in users:
-            BANNED_USERS.add(user_id)
-    except:
+        for uid in await get_gbanned():
+            BANNED_USERS.add(uid)
+        for uid in await get_banned_users():
+            BANNED_USERS.add(uid)
+    except Exception:
         pass
-    
+
+    # ===============================
+    # Start bot
+    # ===============================
     await app.start()
-    
-    for all_module in ALL_MODULES:
-        importlib.import_module("BrandrdXMusic.plugins" + all_module)
-    
+
+    # ===============================
+    # Load plugins
+    # ===============================
+    for module in ALL_MODULES:
+        importlib.import_module("BrandrdXMusic.plugins" + module)
+
     LOGGER("BrandrdXMusic.plugins").info("Successfully Imported Modules...")
-    
+
+    # ===============================
+    # Start assistants (userbots)
+    # ===============================
     await userbot.start()
-    
-    # تشغيل الكلاس الجديد الخاص بالاتصال
-    await Hotty.start()
-    
-    # ⚠️ تم حذف جزء stream_call لأنه غير موجود في الكود الجديد ويسبب كراش
-    # البوت لا يحتاج للانضمام لمكالمة وهمية عند البدء، سيعمل بشكل طبيعي عند طلب أغنية.
-    
-    # تفعيل المستمعين للأحداث
-    await Hotty.decorators()
-    
+
+    # ===============================
+    # Start pytgcalls engine
+    # ===============================
+    await call.start()        # ✔️ start + decorators داخليًا
+    # ❌ ممنوع call.decorators() هنا
+
     print("-------------------------------------------------------")
-    print("🚀 البوت يعمل الآن بنجاح مع التحديثات الجديدة")
+    print("🚀 البوت يعمل الآن بنجاح (VOICE ENGINE READY)")
     print("-------------------------------------------------------")
-    
+
     LOGGER("BrandrdXMusic").info(f"Bot Started: @{app.username}")
-    
+
     await idle()
-    
+
+    # ===============================
+    # Graceful shutdown
+    # ===============================
     await app.stop()
     await userbot.stop()
 
+
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(init())
+    asyncio.run(init())
