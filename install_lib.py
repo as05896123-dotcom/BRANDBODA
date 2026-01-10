@@ -3,7 +3,6 @@ import sys
 import subprocess
 import shutil
 import compileall
-import re
 
 def setup_library():
     LIB_NAME = "pytgcalls"
@@ -39,7 +38,7 @@ def setup_library():
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # 3. الإصلاح الذكي (Smart Patch) 🧠
+    # 3. الإصلاح (Smart Fix with 'return') 🧠
     print("🔧 Applying Smart Fix...")
     file_path = os.path.join(lib_path, "mtproto", "pyrogram_client.py")
     
@@ -51,25 +50,24 @@ def setup_library():
         fixed = False
         
         for line in lines:
-            # بندور على السطر اللي بيعمل المشكلة (سواء القديم أو اللي حاولنا نصلحه)
+            # بندور على السطر اللي بيعمل المشكلة
             if "chat_id = self.chat_id(chats[update.chat_id])" in line or \
                "chat_id = self.chat_id(chats[update.chat.id])" in line:
                 
-                # بنحسب المسافة البادئة (Indentation) عشان الكود ميبوظش
                 indent = line[:line.find("chat_id")]
                 
-                # ده الكود البديل: بيجرب كله، ولو فشل بيعمل continue
+                # التصحيح: استخدام return بدل continue
                 patch_block = (
                     f"{indent}try:\n"
                     f"{indent}    c_id = getattr(update, 'chat_id', getattr(getattr(update, 'chat', None), 'id', None))\n"
-                    f"{indent}    if c_id is None: continue\n"
+                    f"{indent}    if c_id is None: return\n"
                     f"{indent}    chat_id = self.chat_id(chats[c_id])\n"
                     f"{indent}except (AttributeError, KeyError):\n"
-                    f"{indent}    continue\n"
+                    f"{indent}    return\n"
                 )
                 new_lines.append(patch_block)
                 fixed = True
-                print("✅ Found and replaced crashing line with SAFE BLOCK.")
+                print("✅ Found and replaced crashing line with SAFE RETURN.")
             else:
                 new_lines.append(line)
         
@@ -77,7 +75,6 @@ def setup_library():
             with open(file_path, "w") as f:
                 f.writelines(new_lines)
             
-            # إعادة بناء الذاكرة
             print("🔄 Recompiling library...")
             compileall.compile_dir(lib_path, force=True)
             print("✅ Fix Applied & Compiled.")
