@@ -21,9 +21,13 @@ if sys.platform != "win32":
         print("⚠️ UVLOOP not found, using default asyncio.")
 
 # ---------------------------------------------------
-# 🤖 2. تشغيل البوت
+# 🤖 2. تشغيل البوت على نفس الـ loop
 # ---------------------------------------------------
 from BrandrdXMusic.__main__ import init
 
 if __name__ == "__main__":
-    asyncio.run(init())
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(init())
+    finally:
+        loop.close()
