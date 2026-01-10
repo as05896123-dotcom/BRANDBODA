@@ -1,41 +1,36 @@
-# BrandrdXMusic/plugins/healer.py
+# BrandrdXMusic/plugins/tools/healer.py
 # ==============================================================================
-# 🚑 THE MEDIC PLUGIN: ملف "طبيب" خارجي
-# بيشتغل أوتوماتيك مع البلاجن وبيصلح المكتبة من غير ما تلمس ملفات السيستم
+# 🚑 HEALER TOOL: أداة العلاج الذكي
+# المكان: plugins/tools/healer.py
+# الوظيفة: إصلاح خطأ chat_id في pytgcalls تلقائياً
 # ==============================================================================
 
 import sys
-from pyrogram import Client
 
-# بنعمل دالة بتشتغل أول ما الملف يتحمل
-def inject_cure():
+def apply_cure():
     try:
-        # بننادي على المكتبة المريضة
+        # 1. استدعاء المكتبة
         from pytgcalls.types import UpdateGroupCall
         
-        # بنكشف عليها: هل ناقصها chat_id؟
+        # 2. الكشف عن المشكلة
         if not hasattr(UpdateGroupCall, "chat_id"):
             
-            # 💊 العلاج: زرع الخاصية المفقودة
-            # (ذكية: لو مفيش chat بترجع 0 عشان ميعملش كراش)
-            def _healer_getter(self):
-                try:
-                    return self.chat.id
-                except AttributeError:
-                    return 0
+            # 3. تجهيز العلاج (getter ذكي)
+            def _healed_chat_id(self):
+                # بيحاول يجيب الـ ID من self.chat
+                # لو مش موجود بيرجع 0 بدل ما يعمل كراش
+                return getattr(getattr(self, "chat", None), "id", 0)
             
-            # حقن العلاج
-            UpdateGroupCall.chat_id = property(_healer_getter)
+            # 4. حقن العلاج
+            UpdateGroupCall.chat_id = property(_healed_chat_id)
             
-            print("\n✅ [HEALER PLUGIN] System cured! 'UpdateGroupCall' is fixed.\n")
-        else:
-            print("ℹ️ [HEALER PLUGIN] System is already healthy.")
+            print("✅ [TOOLS] Healer applied: 'UpdateGroupCall' is now safe.")
             
     except ImportError:
-        # لو المكتبة مش موجودة، الطبيب بيمشي بهدوء
-        print("⚠️ [HEALER] pytgcalls not found yet.")
+        # لو المكتبة لسه متحملتش، مش مشكلة
+        pass
     except Exception as e:
-        print(f"⚠️ [HEALER] Error: {e}")
+        print(f"⚠️ [TOOLS] Healer Error: {e}")
 
-# تشغيل الطبيب فوراً عند تحميل البلاجن
-inject_cure()
+# تنفيذ العلاج فوراً
+apply_cure()
