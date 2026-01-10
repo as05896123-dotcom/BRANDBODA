@@ -1,6 +1,5 @@
 # --- Core System (الأساسيات) ---
 kurigram>=2.2.14
-py-tgcalls==2.2.8
 ntgcalls>=2.0.6
 telethon>=1.36.0
 tgcrypto
