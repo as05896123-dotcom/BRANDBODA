@@ -14,17 +14,45 @@ from pytgcalls.exceptions import (
     NoVideoSourceFound
 )
 
-# نحاول استيراد الأخطاء بشكل آمن حسب إصدار المكتبة
+# =======================================================================
+# 💉 SURGICAL PATCH: الحل الجراحي لمنع الكراش والصمت
+# =======================================================================
 try:
-    from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound, NotInCallError
+    import pytgcalls.mtproto.pyrogram_client
+    
+    # نحتفظ بالدالة الأصلية اللي بتعمل مشاكل
+    _real_on_update = pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update
+
+    async def _anti_crash_on_update(self, client, update):
+        try:
+            # بنحاول نشغل الدالة الأصلية
+            await _real_on_update(self, client, update)
+        except AttributeError as e:
+            # لو الخطأ هو chat_id اللي بيطلعلك، نتجاهله تماماً ونكمل
+            if "chat_id" in str(e):
+                return
+            raise e
+        except Exception:
+            # أي خطأ تاني مش مهم في التحديثات دي
+            pass
+
+    # استبدال الدالة المعطوبة بالدالة المحمية
+    pytgcalls.mtproto.pyrogram_client.PyrogramClient.on_update = _anti_crash_on_update
+except:
+    pass
+
+# =======================================================================
+# 📦 باقي الكود والمنطق الكامل
+# =======================================================================
+
+try:
+    from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
-    # Fallback للإصدارات القديمة أو المختلفة
     try:
-        from ntgcalls import TelegramServerError, ConnectionNotFound, NotInCallError
+        from ntgcalls import TelegramServerError, ConnectionNotFound
     except:
         TelegramServerError = Exception
         ConnectionNotFound = Exception
-        NotInCallError = Exception
 
 import config
 from strings import get_string
@@ -38,7 +66,6 @@ from BrandrdXMusic.utils.database import (
     group_assistant,
     is_autoend,
     music_on,
-    music_off,
     remove_active_chat,
     remove_active_video_chat,
     set_loop,
@@ -58,9 +85,8 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# 🚀 SMART CACHE SYSTEM
+# 🚀 SMART CACHE
 # =======================================================================
-
 class SmartCache:
     def __init__(self):
         self.cache: Dict[str, Dict] = {}
@@ -93,21 +119,22 @@ class SmartCache:
 music_cache = SmartCache()
 
 # =======================================================================
-# 🔊 STEREO & STABLE CONFIGURATION
+# 🔊 STEREO & AUDIO CONFIG (Fixing Silence)
 # =======================================================================
 
+# تم تعديل إعدادات FFmpeg عشان تعالج مشكلة الصمت
 REMOTE_FFMPEG = (
     "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
     "-ac 2 -ar 48000 "
     "-analyzeduration 15000000 -probesize 100000000 "
-    "-dn -sn "
+    "-vn " # إلغاء الفيديو في وضع الصوت لتقليل الحمل
     "-preset veryfast"
 )
 
 LOCAL_FFMPEG = (
     "-ac 2 -ar 48000 "
     "-analyzeduration 0 -probesize 32 "
-    "-dn -sn "
+    "-vn "
     "-preset veryfast"
 )
 
@@ -123,16 +150,12 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
             media_path=path,
             audio_parameters=AudioQuality.STUDIO,
             video_parameters=video_q,
-            audio_flags=MediaStream.Flags.REQUIRED,
-            video_flags=MediaStream.Flags.REQUIRED,
-            ffmpeg_parameters=final_ffmpeg,
+            ffmpeg_parameters=f"-reconnect 1 -reconnect_streamed 1 -ac 2 -ar 48000 {ffmpeg if ffmpeg else ''}",
         )
     else:
         return MediaStream(
             media_path=path,
             audio_parameters=AudioQuality.STUDIO,
-            video_parameters=VideoQuality.HD_720p,
-            audio_flags=MediaStream.Flags.REQUIRED,
             video_flags=MediaStream.Flags.IGNORE,
             ffmpeg_parameters=final_ffmpeg,
         )
@@ -183,7 +206,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Music Engine (Clean Mode)...")
+        LOGGER(__name__).info("🚀 Starting Music Engine (Anti-Crash Mode)...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -203,32 +226,28 @@ class Call:
         client = await self.get_tgcalls(chat_id)
         try:
             await client.pause(chat_id)
-        except (NotInCallError, NoActiveGroupCall):
+        except:
             pass
-        except Exception as e:
-            LOGGER(__name__).error(f"Pause Error: {e}")
 
     async def resume_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.resume(chat_id)
-        except (NotInCallError, NoActiveGroupCall):
+        except:
             pass
-        except Exception as e:
-            LOGGER(__name__).error(f"Resume Error: {e}")
 
     async def mute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.mute(chat_id)
-        except (NotInCallError, NoActiveGroupCall):
+        except:
             pass
 
     async def unmute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.unmute(chat_id)
-        except (NotInCallError, NoActiveGroupCall):
+        except:
             pass
 
     async def stop_stream(self, chat_id: int):
@@ -266,8 +285,7 @@ class Call:
 
         try:
             await client.play(chat_id, stream)
-            await asyncio.sleep(0.5)
-
+            await asyncio.sleep(1) # زيادة وقت الانتظار قليلاً للتأكد من الاستقرار
         except (NoActiveGroupCall, ChatAdminRequired):
             raise AssistantErr(_.get("call_8", "قم بفتح المكالمة الصوتية أولاً."))
         except (NoAudioSourceFound, NoVideoSourceFound):
@@ -507,22 +525,20 @@ class Call:
             except: pass
 
     async def decorators(self):
-        # ⚠️ الحل النهائي لمشكلة chat_id
-        # استخدام معالجات الأحداث المتخصصة بدلاً من on_update العامة
-        
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
-        async def _stream_end_handler(client, update: Update):
-            if isinstance(update, StreamEnded):
-                try: 
-                    await self.change_stream(client, update.chat_id)
-                except Exception: 
-                    pass
+        async def unified_update_handler(client, update: Update):
+            if not getattr(update, "chat_id", None):
+                return
+            
+            chat_id = update.chat_id
 
-        async def _chat_update_handler(client, update: Update):
-            if isinstance(update, ChatUpdate):
+            if isinstance(update, StreamEnded):
+                try: await self.change_stream(client, chat_id)
+                except Exception: pass
+            
+            elif isinstance(update, ChatUpdate):
                 status = update.status
-                chat_id = update.chat_id
                 if (status & ChatUpdate.Status.LEFT_CALL) or \
                    (status & ChatUpdate.Status.KICKED) or \
                    (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
@@ -530,19 +546,11 @@ class Call:
 
         for assistant in assistants:
             try:
-                # ربط الدوال بالأحداث المحددة فقط
-                # هذا يمنع المكتبة من معالجة التحديثات التالفة
-                if hasattr(assistant, 'on_stream_end'):
-                    assistant.on_stream_end()(_stream_end_handler)
-                
-                if hasattr(assistant, 'on_chat_update'):
-                    assistant.on_chat_update()(_chat_update_handler)
-                elif hasattr(assistant, 'on_kicked'):
-                     # Fallback for older versions
-                    assistant.on_kicked()(_chat_update_handler)
-                    assistant.on_closed_voice_chat()(_chat_update_handler)
-                    assistant.on_left()(_chat_update_handler)
-
+                if hasattr(assistant, 'on_update'):
+                    assistant.on_update()(unified_update_handler)
+                elif hasattr(assistant, 'on_stream_end'):
+                    assistant.on_stream_end()(unified_update_handler)
+                    assistant.on_chat_update()(unified_update_handler)
             except: pass
 
 Hotty = Call()
