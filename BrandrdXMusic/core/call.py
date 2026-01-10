@@ -6,15 +6,8 @@
    ██║   ██║   ██║   ██║  ██║██║ ╚████║██║╚██████╔╝██║ ╚═╝ ██║
    ╚═╝   ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝     ╚═╝
    
-   TITANIUM AUDIO ENGINE - MONOLITH EDITION (v9.0)
+   TITANIUM AUDIO ENGINE - MONOLITH EDITION (v9.1 - Fixed)
    Architected for Maximum Stability & High-Fidelity Audio
-   
-   This file contains:
-   1. Advanced Cache Management System
-   2. Dynamic FFmpeg Command Builder
-   3. Stream Health Monitoring
-   4. Automatic Failover Strategy
-   5. Thread-Safe Execution Contexts
 """
 
 import asyncio
@@ -53,8 +46,8 @@ from pytgcalls.types import (
 from pytgcalls.exceptions import (
     NoActiveGroupCall,
     NoAudioSourceFound,
-    NoVideoSourceFound,
-    InvalidStreamMode
+    NoVideoSourceFound
+    # Removed InvalidStreamMode to fix ImportError
 )
 
 # Handle Library Versioning
@@ -826,4 +819,3 @@ async def _clear_(chat_id: int) -> None:
         await set_loop(chat_id, 0)
     except:
         pass
-
