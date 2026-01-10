@@ -17,17 +17,22 @@ from pytgcalls.types import (
     ChatUpdate, 
     Update
 )
-from pytgcalls.exceptions import (
-    NoActiveGroupCall,
-    NoAudioSourceFound,
-    NoVideoSourceFound
-)
-
-# --- إصلاح جذري لمشكلة استيراد الاستثناءات (سبب الـ Crash) ---
+# معالجة استثناءات المكتبة بشكل شامل
 try:
-    from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound, AlreadyJoinedError
+    from pytgcalls.exceptions import (
+        NoActiveGroupCall,
+        NoAudioSourceFound,
+        NoVideoSourceFound,
+        TelegramServerError, 
+        ConnectionNotFound, 
+        AlreadyJoinedError
+    )
 except ImportError:
-    # إنشاء استثناءات وهمية في حال عدم وجودها في المكتبة لتجنب التوقف
+    from pytgcalls.exceptions import (
+        NoActiveGroupCall,
+        NoAudioSourceFound,
+        NoVideoSourceFound
+    )
     class TelegramServerError(Exception): pass
     class ConnectionNotFound(Exception): pass
     class AlreadyJoinedError(Exception): pass
@@ -63,91 +68,37 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# 🗂️ SMART CACHE SYSTEM
+# ⚙️ إعدادات FFmpeg المحسنة (لحل مشكلة الصمت والـ Timeout)
 # =======================================================================
 
-class SmartCache:
-    def __init__(self):
-        self.cache: Dict[str, Dict] = {}
-        self.ttl = 420  # 7 Minutes
-
-    def get(self, video_id: str) -> str:
-        self.cleanup()
-        if video_id in self.cache:
-            entry = self.cache[video_id]
-            if time.time() - entry['timestamp'] < self.ttl:
-                if os.path.exists(entry['path']):
-                    return entry['path']
-        return None
-
-    def store(self, video_id: str, path: str):
-        abs_path = os.path.abspath(path)
-        self.cache[video_id] = {
-            'path': abs_path,
-            'timestamp': time.time()
-        }
-
-    def cleanup(self):
-        now = time.time()
-        to_remove = []
-        for vid, entry in self.cache.items():
-            if now - entry['timestamp'] > self.ttl:
-                to_remove.append(vid)
-                if os.path.exists(entry['path']):
-                    try: os.remove(entry['path'])
-                    except: pass
-        for vid in to_remove:
-            del self.cache[vid]
-
-music_cache = SmartCache()
-
-# =======================================================================
-# ⚙️ STREAM CONFIGURATION
-# =======================================================================
-
+# تم إزالة الأوامر المعقدة التي تسبب Timeout واستبدالها بأوامر مستقرة
 REMOTE_FFMPEG = (
     "-reconnect 1 "
     "-reconnect_streamed 1 "
     "-reconnect_delay_max 5 "
-    "-probesize 32M "
-    "-analyzeduration 15M "
-    "-ac 2 "
-    "-ar 48000 "
     "-nostdin "
-    "-fflags nobuffer "
-    "-flags low_delay "
-    "-loglevel error"
+    "-vn " # تجاهل الفيديو للصوتيات لتقليل الضغط
 )
 
-LOCAL_FFMPEG = (
-    "-ac 2 "
-    "-ar 48000 "
-    "-nostdin "
-    "-fflags nobuffer "
-    "-flags low_delay "
-    "-loglevel error"
-)
-
-def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0, quality_mode: str = "studio") -> MediaStream:
+def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0) -> MediaStream:
     is_url = path.startswith("http")
-    base_ffmpeg = REMOTE_FFMPEG if is_url else LOCAL_FFMPEG
-    combined_ffmpeg = f"{base_ffmpeg} {ffmpeg}" if ffmpeg else base_ffmpeg
-
-    # Fallback Logic
-    if quality_mode == "studio":
-        audio_params = AudioQuality.STUDIO
-    else:
-        audio_params = AudioQuality.HIGH
     
-    # تحسين جودة الفيديو حسب المصدر
-    video_params = VideoQuality.HD_720p if (is_url or duration > 600) else VideoQuality.FHD_1080p
+    # تحسينات للصوت فقط لتفادي التقطيع
+    ffmpeg_params = ffmpeg if ffmpeg else ""
+    if is_url and not video:
+        ffmpeg_params += " -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+
+    # استخدام إعدادات High بدلاً من Studio لأنها أكثر استقراراً في السيرفرات الضعيفة
+    # Studio يتطلب سرعة رفع عالية جداً مما يسبب Timeout
+    audio_params = AudioQuality.HIGH 
+    video_params = VideoQuality.HD_720p if video else VideoQuality.SD_480p
 
     return MediaStream(
         media_path=path,
         audio_parameters=audio_params,
-        video_parameters=video_params if video else VideoQuality.SD_480p,
+        video_parameters=video_params,
         video_flags=MediaStream.Flags.IGNORE if not video else MediaStream.Flags.REQUIRED,
-        ffmpeg_parameters=combined_ffmpeg,
+        ffmpeg_parameters=ffmpeg_params if ffmpeg_params else None,
     )
 
 async def _clear_(chat_id: int) -> None:
@@ -166,20 +117,21 @@ async def _clear_(chat_id: int) -> None:
 
 class Call:
     def __init__(self):
+        # إضافة cache_duration=100 لحل مشكلة التايم أوت
         self.userbot1 = Client("BrandrdXMusic1", config.API_ID, config.API_HASH, session_string=config.STRING1) if config.STRING1 else None
-        self.one = PyTgCalls(self.userbot1) if self.userbot1 else None
+        self.one = PyTgCalls(self.userbot1, cache_duration=100) if self.userbot1 else None
 
         self.userbot2 = Client("BrandrdXMusic2", config.API_ID, config.API_HASH, session_string=config.STRING2) if config.STRING2 else None
-        self.two = PyTgCalls(self.userbot2) if self.userbot2 else None
+        self.two = PyTgCalls(self.userbot2, cache_duration=100) if self.userbot2 else None
 
         self.userbot3 = Client("BrandrdXMusic3", config.API_ID, config.API_HASH, session_string=config.STRING3) if config.STRING3 else None
-        self.three = PyTgCalls(self.userbot3) if self.userbot3 else None
+        self.three = PyTgCalls(self.userbot3, cache_duration=100) if self.userbot3 else None
 
         self.userbot4 = Client("BrandrdXMusic4", config.API_ID, config.API_HASH, session_string=config.STRING4) if config.STRING4 else None
-        self.four = PyTgCalls(self.userbot4) if self.userbot4 else None
+        self.four = PyTgCalls(self.userbot4, cache_duration=100) if self.userbot4 else None
 
         self.userbot5 = Client("BrandrdXMusic5", config.API_ID, config.API_HASH, session_string=config.STRING5) if config.STRING5 else None
-        self.five = PyTgCalls(self.userbot5) if self.userbot5 else None
+        self.five = PyTgCalls(self.userbot5, cache_duration=100) if self.userbot5 else None
 
         self.active_calls = set()
         
@@ -195,47 +147,49 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
-    # --- دالة التشغيل الآمن والذكي ---
+    # --- تشغيل آمن يمنع تعليق المساعد ---
     async def _play_stream_safe(self, client, chat_id, path, video, duration_sec=0, ffmpeg=None):
         assistant = await group_assistant(self, chat_id)
         
-        # 1. التأكد من انضمام المساعد للمجموعة أولاً
+        # 1. التأكد من انضمام المساعد
         try:
             await assistant.get_chat_member(chat_id, assistant.me.id)
         except UserNotParticipant:
             try:
                 await assistant.join_chat(chat_id)
-                await asyncio.sleep(2) # انتظار قليل للتأكد من الانضمام
+                await asyncio.sleep(2) # انتظار لضمان استقرار الاتصال
             except Exception as e:
-                LOGGER(__name__).warning(f"Assistant failed to join chat {chat_id}: {e}")
-                # قد يكون المساعد محظوراً أو المجموعة خاصة جداً، سنحاول التشغيل على أي حال
+                pass
 
-        # 2. محاولة التشغيل مع Fallback للجودة
+        # 2. تنظيف الاتصالات الميتة (Dead Connections)
+        # إذا كان المساعد يعتقد أنه في المكالمة ولكن الصوت لا يعمل، نخرجه أولاً
         try:
-            stream = build_stream(path, video, ffmpeg, duration_sec, quality_mode="studio")
+            if chat_id in self.active_calls:
+                 await client.leave_call(chat_id)
+                 await asyncio.sleep(0.5)
+        except:
+            pass
+
+        # 3. التشغيل
+        try:
+            stream = build_stream(path, video, ffmpeg, duration_sec)
             await client.play(chat_id, stream)
         except NoActiveGroupCall:
-            # المكالمة غير مفتوحة
             raise NoActiveGroupCall
         except Exception as e:
-            err_str = str(e)
-            if "AlreadyJoined" in err_str:
-                # إذا كان متصلاً بالفعل ولكن لا يعمل، نخرج ثم ندخل
-                try: await client.leave_call(chat_id)
-                except: pass
-                await asyncio.sleep(1)
-                stream = build_stream(path, video, ffmpeg, duration_sec, quality_mode="high")
-                await client.play(chat_id, stream)
-            elif "NoActiveGroupCall" in err_str:
-                raise NoActiveGroupCall
+            # معالجة أخطاء GROUPCALL_INVALID
+            if "GROUPCALL_INVALID" in str(e) or "The specified group call is invalid" in str(e):
+                 # المساعد عالق في حالة خطأ، يجب الخروج القسري وإعادة المحاولة
+                 try: await client.leave_call(chat_id)
+                 except: pass
+                 await asyncio.sleep(1)
+                 await client.play(chat_id, stream)
             else:
-                LOGGER(__name__).warning(f"Studio failed, retrying High Quality. Error: {e}")
-                # محاولة أخيرة بجودة أقل لتجنب التقطيع
-                stream = build_stream(path, video, ffmpeg, duration_sec, quality_mode="high")
-                await client.play(chat_id, stream)
+                LOGGER(__name__).error(f"Stream Failed: {e}")
+                raise e
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Advanced Audio Engine (v2.2.8)...")
+        LOGGER(__name__).info("🚀 Starting Advanced Audio Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -298,33 +252,27 @@ class Call:
         if not link.startswith("http"):
             link = os.path.abspath(link)
 
-        # محاولة إنعاش حالة الجروب والانضمام إذا لم يكن موجوداً
+        # ضمان وجود المساعد
         try:
-            member = await assistant.get_chat_member(chat_id, assistant.me.id)
-            if member.status == "kicked":
-                try: await assistant.unban_chat_member(chat_id, assistant.me.id)
-                except: pass # حاول رفع الحظر إذا كان مشرفاً
-                raise AssistantErr(_["call_8"])
-        except UserNotParticipant:
-            try:
-                await assistant.join_chat(chat_id)
-                await asyncio.sleep(1)
-            except Exception as e:
-                # إذا فشل الانضمام عبر بايروجرام، سيحاول pytgcalls الانضمام عبر play
-                pass 
+            await assistant.join_chat(chat_id)
+        except UserAlreadyParticipant:
+            pass
         except Exception:
+            # قد يفشل الانضمام لأسباب تتعلق بالخصوصية، نستمر للمحاولة عبر المكالمة
             pass
 
         try:
             await self._play_stream_safe(client, chat_id, link, bool(video))
             
         except (NoActiveGroupCall, ChatAdminRequired):
-            raise AssistantErr(_["call_8"]) # يرجى تشغيل المحادثة الصوتية أولاً
+            raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
         except (TelegramServerError, ConnectionNotFound):
             raise AssistantErr(_["call_10"])
         except Exception as e:
+            if "not found" in str(e).lower():
+                raise AssistantErr(_["call_8"])
             LOGGER(__name__).error(f"Join Call Error: {e}")
             raise AssistantErr(f"{e}")
             
@@ -411,14 +359,10 @@ class Call:
             elif "vid_" in queued:
                 mystic = await app.send_message(original_chat_id, _["call_7"])
                 
-                file_path = music_cache.get(videoid)
-                if not file_path:
-                    try: 
-                        file_path, direct = await YouTube.download(videoid, mystic, videoid=True, video=video)
-                        file_path = os.path.abspath(file_path)
-                        music_cache.store(videoid, file_path)
-                    except: 
-                        return await mystic.edit_text(_["call_6"])
+                try: 
+                    file_path, direct = await YouTube.download(videoid, mystic, videoid=True, video=video)
+                except: 
+                    return await mystic.edit_text(_["call_6"])
                 
                 await self._play_stream_safe(client, chat_id, file_path, video, duration_sec)
 
@@ -503,25 +447,21 @@ class Call:
         await self._play_stream_safe(client, chat_id, link, bool(video))
 
     async def seek_stream(self, chat_id, file_path, to_seek, duration, mode):
-        """تقديم وترجيع الأغنية باستخدام FFmpeg"""
         client = await self.get_tgcalls(chat_id)
         file_path = os.path.abspath(file_path)
-        # بارامترات التقدم: -ss للبداية، -to للنهاية
         ffmpeg = f"-ss {to_seek} -to {duration}"
         await self._play_stream_safe(client, chat_id, file_path, (mode == "video"), ffmpeg=ffmpeg)
 
     async def speedup_stream(self, chat_id, file_path, speed, playing):
-        """تغيير سرعة التشغيل"""
         client = await self.get_tgcalls(chat_id)
         file_path = os.path.abspath(file_path)
         base = os.path.basename(file_path)
-        
         chatdir = os.path.join(os.getcwd(), "playback", str(speed))
         os.makedirs(chatdir, exist_ok=True)
         out = os.path.join(chatdir, base)
 
         if not os.path.exists(out):
-            vs = str(2.0 / float(speed)) # Video Speed
+            vs = str(2.0 / float(speed))
             cmd = f'ffmpeg -i "{file_path}" -filter:v "setpts={vs}*PTS" -filter:a atempo={speed} -y "{out}"'
             proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await proc.communicate()
@@ -542,7 +482,6 @@ class Call:
             })
 
     async def stream_call(self, link):
-        """تشغيل بث تجريبي في مجموعة السجلات"""
         assistant = await self.get_tgcalls(config.LOGGER_ID)
         try:
             await assistant.play(config.LOGGER_ID, MediaStream(link))
@@ -552,10 +491,11 @@ class Call:
             except: pass
 
     async def decorators(self):
-        """المزخرفات (Event Handlers) الموحدة"""
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update):
+            # إصلاح جوهري: التحقق من وجود chat_id لتجنب AttributeError
+            # هذا الكود سيمنع الخطأ الذي يظهر في السجلات من إيقاف البوت
             if not getattr(update, "chat_id", None):
                 return
             
