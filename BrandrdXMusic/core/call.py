@@ -24,7 +24,7 @@ from pytgcalls.exceptions import (
     AlreadyJoinedError
 )
 
-# معالجة استثناءات المكتبة حسب الإصدار
+# معالجة استثناءات المكتبة حسب الإصدار لضمان عدم حدوث Crash
 try:
     from pytgcalls.exceptions import TelegramServerError, ConnectionNotFound
 except ImportError:
@@ -193,12 +193,15 @@ class Call:
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
-    # --- دالة التشغيل الآمن ---
+    # --- دالة التشغيل الآمن (The Safe Player) ---
     async def _play_stream_safe(self, client, chat_id, path, video, duration_sec=0, ffmpeg=None):
+        """دالة مركزية للتشغيل تحاول تجنب الأخطاء الشائعة"""
         # 1. Force Leave: تنظيف أي اتصال معلق (الحل لمشكلة AlreadyJoined أو CallNotFound)
         try:
-            await client.leave_call(chat_id)
-            await asyncio.sleep(0.5) # وقت قصير للسيرفر
+            # محاولة خفيفة للخروج في حالة وجود بقايا اتصال
+            if chat_id in self.active_calls:
+                await client.leave_call(chat_id)
+                await asyncio.sleep(0.2)
         except:
             pass
 
@@ -207,19 +210,19 @@ class Call:
             stream = build_stream(path, video, ffmpeg, duration_sec, quality_mode="studio")
             await client.play(chat_id, stream)
         except Exception as e:
-            LOGGER(__name__).warning(f"Studio failed, downgrading: {e}")
-            # 3. Fallback to High Quality
+            LOGGER(__name__).warning(f"Studio failed for {chat_id}, trying High Quality. Error: {e}")
+            # 3. Fallback to High Quality (إذا فشل الاستوديو بسبب ضعف النت أو مشاكل المصدر)
             try:
                 stream = build_stream(path, video, ffmpeg, duration_sec, quality_mode="high")
                 await client.play(chat_id, stream)
             except Exception as final_e:
-                # إذا فشل التشغيل، نتأكد إنه مش بسبب إن الكول مش موجود
+                # إذا فشل التشغيل، نتأكد هل الخطأ بسبب عدم وجود مكالمة
                 if "NoActiveGroupCall" in str(final_e) or "Call not found" in str(final_e):
                     raise NoActiveGroupCall
                 raise final_e
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Advanced Audio Engine...")
+        LOGGER(__name__).info("🚀 Starting Advanced Audio Engine (v2.2.8)...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -273,7 +276,6 @@ class Call:
             except: pass
             finally: self.active_calls.discard(chat_id)
 
-    # --- دالة الانضمام المعدلة (The Fix) ---
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
         client = await self.get_tgcalls(chat_id)
         assistant = await group_assistant(self, chat_id)
@@ -283,28 +285,21 @@ class Call:
         if not link.startswith("http"):
             link = os.path.abspath(link)
 
-        # 1. تحديث الكاش الخاص بـ Pyrogram (مهم جداً لحل مشكلة not found)
-        # هذا يجبر المساعد على التأكد من بيانات الجروب من السيرفر
-        try:
-            await assistant.get_chat(chat_id)
-        except:
-            pass
+        # إنعاش حالة الجروب في بايروجرام
+        try: await assistant.get_chat(chat_id)
+        except: pass
 
         try:
-            # نحاول التشغيل
+            # استخدام دالة التشغيل الآمن
             await self._play_stream_safe(client, chat_id, link, bool(video))
             
         except (NoActiveGroupCall, ChatAdminRequired):
-            # التأكد النهائي: هل المساعد في الجروب؟
+            # محاولة الانضمام التلقائي إذا لم يكن المساعد موجوداً
             try:
-                await assistant.get_chat_member(chat_id, assistant.me.id)
-            except:
-                # لو مش في الجروب، نحاول ندخله (احتياطي)
-                try:
-                    await assistant.join_chat(chat_id)
-                except:
-                    pass
-            raise AssistantErr(_["call_8"]) # رجاء فتح المحادثة الصوتية
+                await assistant.join_chat(chat_id)
+            except Exception as e:
+                pass
+            raise AssistantErr(_["call_8"]) # يرجى التأكد من تشغيل المكالمة المرئية
 
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
@@ -491,34 +486,52 @@ class Call:
         await self._play_stream_safe(client, chat_id, link, bool(video))
 
     async def seek_stream(self, chat_id, file_path, to_seek, duration, mode):
+        """تقديم وترجيع الأغنية باستخدام FFmpeg"""
         client = await self.get_tgcalls(chat_id)
         file_path = os.path.abspath(file_path)
+        # بارامترات التقدم: -ss للبداية، -to للنهاية
         ffmpeg = f"-ss {to_seek} -to {duration}"
         await self._play_stream_safe(client, chat_id, file_path, (mode == "video"), ffmpeg=ffmpeg)
 
     async def speedup_stream(self, chat_id, file_path, speed, playing):
+        """تغيير سرعة التشغيل"""
         client = await self.get_tgcalls(chat_id)
         file_path = os.path.abspath(file_path)
         base = os.path.basename(file_path)
+        
+        # إنشاء مسار للملف الجديد بناء على السرعة
         chatdir = os.path.join(os.getcwd(), "playback", str(speed))
         os.makedirs(chatdir, exist_ok=True)
         out = os.path.join(chatdir, base)
 
+        # إذا لم يكن الملف موجوداً، نقوم بتحويله
         if not os.path.exists(out):
-            vs = str(2.0 / float(speed))
+            # معادلات تسريع الفيديو والصوت
+            vs = str(2.0 / float(speed)) # Video Speed
             cmd = f'ffmpeg -i "{file_path}" -filter:v "setpts={vs}*PTS" -filter:a atempo={speed} -y "{out}"'
             proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await proc.communicate()
 
+        # حساب المدة الجديدة
         dur = int(await asyncio.get_event_loop().run_in_executor(None, check_duration, out))
         played, con_seconds = speed_converter(playing[0]["played"], speed)
+        
+        # إكمال التشغيل من النقطة الحالية ولكن بالسرعة الجديدة
         ffmpeg = f"-ss {played} -to {seconds_to_min(dur)}"
         
         if chat_id in db:
             await self._play_stream_safe(client, chat_id, out, (playing[0]["streamtype"] == "video"), ffmpeg=ffmpeg)
-            db[chat_id][0].update({"played": con_seconds, "dur": seconds_to_min(dur), "seconds": dur, "speed_path": out, "speed": speed})
+            # تحديث قاعدة البيانات بالمعلومات الجديدة
+            db[chat_id][0].update({
+                "played": con_seconds, 
+                "dur": seconds_to_min(dur), 
+                "seconds": dur, 
+                "speed_path": out, 
+                "speed": speed
+            })
 
     async def stream_call(self, link):
+        """تشغيل بث تجريبي في مجموعة السجلات"""
         assistant = await self.get_tgcalls(config.LOGGER_ID)
         try:
             await assistant.play(config.LOGGER_ID, MediaStream(link))
@@ -528,6 +541,7 @@ class Call:
             except: pass
 
     async def decorators(self):
+        """المزخرفات (Event Handlers) للتعامل مع التحديثات"""
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
         async def unified_update_handler(client, update: Update):
@@ -536,12 +550,14 @@ class Call:
             
             chat_id = update.chat_id
 
+            # 1. عند انتهاء الأغنية
             if isinstance(update, StreamEnded):
                 try: 
                     await self.change_stream(client, chat_id)
                 except Exception as e: 
                     LOGGER(__name__).error(f"Error handling StreamEnded for {chat_id}: {e}")
 
+            # 2. عند تحديث حالة المكالمة (طرد/خروج)
             elif isinstance(update, ChatUpdate):
                 status = update.status
                 if (status == ChatUpdate.Status.LEFT_CALL) or \
@@ -549,6 +565,7 @@ class Call:
                    (status == ChatUpdate.Status.CLOSED_VOICE_CHAT):
                     await self.stop_stream(chat_id)
 
+        # تسجيل الوظائف لكل مساعد
         for assistant in assistants:
             try:
                 if hasattr(assistant, 'on_update'):
