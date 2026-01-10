@@ -52,13 +52,13 @@ autoend = {}
 counter = {}
 
 # =======================================================================
-# 🗂️ SMART CACHE SYSTEM
+# 🗂️ SMART CACHE SYSTEM (STABLE)
 # =======================================================================
 
 class SmartCache:
     def __init__(self):
         self.cache: Dict[str, Dict] = {}
-        self.ttl = 360  # 6 Minutes
+        self.ttl = 420  # 7 Minutes
 
     def get(self, video_id: str) -> str:
         self.cleanup()
@@ -66,15 +66,15 @@ class SmartCache:
             entry = self.cache[video_id]
             if time.time() - entry['timestamp'] < self.ttl:
                 if os.path.exists(entry['path']):
-                    LOGGER(__name__).info(f"🚀 Cache Hit: {video_id}")
                     return entry['path']
         return None
 
     def store(self, video_id: str, path: str):
-        self.cache[video_id] = {
-            'path': os.path.abspath(path),
-            'timestamp': time.time()
-        }
+        if path and os.path.exists(path):
+            self.cache[video_id] = {
+                'path': os.path.abspath(path),
+                'timestamp': time.time()
+            }
 
     def cleanup(self):
         now = time.time()
@@ -92,26 +92,28 @@ class SmartCache:
 music_cache = SmartCache()
 
 # =======================================================================
-# ⚙️ STREAM CONFIGURATION & FFmpeg (FIXED)
+# ⚙️ STREAM CONFIGURATION & FFmpeg
 # =======================================================================
 
-# إعدادات الروابط الخارجية (Live/URL)
 REMOTE_FFMPEG = (
     "-re "
     "-reconnect 1 "
     "-reconnect_streamed 1 "
     "-reconnect_delay_max 5 "
     "-nostdin "
-    "-fflags nobuffer "
-    "-flags low_delay "
+    "-ac 2 "
+    "-ar 48000 "
+    "-fflags +discardcorrupt "
+    "-analyzeduration 15000000 "
+    "-probesize 15000000 "
     "-loglevel error"
 )
 
-# إعدادات الملفات المحلية (تم إزالة خيارات الاتصال لتجنب الخطأ)
 LOCAL_FFMPEG = (
     "-nostdin "
-    "-fflags nobuffer "
-    "-flags low_delay "
+    "-ac 2 "
+    "-ar 48000 "
+    "-fflags +fastseek "
     "-loglevel error"
 )
 
@@ -123,19 +125,12 @@ def get_video_quality(duration_seconds: int = 0, is_live: bool = False) -> Video
     return VideoQuality.FHD_1080p
 
 def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0) -> MediaStream:
-    # تحديد نوع الملف لتطبيق الإعدادات المناسبة
     is_url = path.startswith("http")
-    
     base_ffmpeg = REMOTE_FFMPEG if is_url else LOCAL_FFMPEG
     
-    if ffmpeg:
-        combined_ffmpeg = f"{base_ffmpeg} {ffmpeg}"
-    else:
-        combined_ffmpeg = base_ffmpeg
+    combined_ffmpeg = f"{base_ffmpeg} {ffmpeg}" if ffmpeg else base_ffmpeg
 
-    # استخدام High بدلاً من Studio إذا كان الملف محلياً لتجنب مشاكل فك التشفير
-    # Studio يتطلب مصدر قوي جداً، High أكثر استقراراً للملفات المحملة
-    audio_params = AudioQuality.High
+    audio_params = AudioQuality.HIGH 
     
     if video:
         video_params = get_video_quality(duration, is_live=is_url)
@@ -203,7 +198,7 @@ class Call:
         return self.pytgcalls_map.get(id(assistant), self.one)
 
     async def start(self):
-        LOGGER(__name__).info("🚀 Starting Advanced Music Engine (Stable Mode)...")
+        LOGGER(__name__).info("🚀 Starting Advanced Music Engine...")
         clients = [self.one, self.two, self.three, self.four, self.five]
         tasks = [c.start() for c in clients if c]
         if tasks:
@@ -262,7 +257,6 @@ class Call:
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         
-        # Ensure path is string and absolute if local
         if not link.startswith("http"):
             link = os.path.abspath(link)
 
@@ -273,13 +267,10 @@ class Call:
         except (NoActiveGroupCall, ChatAdminRequired):
             raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
-            # This specific error usually means path is wrong or FFmpeg failed
-            LOGGER(__name__).error(f"FFmpeg/Source Error for path: {link}")
             raise AssistantErr(_["call_11"])
         except (TelegramServerError, ConnectionNotFound):
             raise AssistantErr(_["call_10"])
         except Exception as e:
-            LOGGER(__name__).error(f"Join Call Error: {e}")
             raise AssistantErr(f"{e}")
             
         self.active_calls.add(chat_id)
@@ -370,7 +361,6 @@ class Call:
                 if not file_path:
                     try: 
                         file_path, direct = await YouTube.download(videoid, mystic, videoid=True, video=video)
-                        # تحويل المسار لمسار مطلق للتأكد
                         file_path = os.path.abspath(file_path)
                         music_cache.store(videoid, file_path)
                     except: 
@@ -451,7 +441,6 @@ class Call:
         except Exception as e:
             LOGGER(__name__).error(f"Play Error: {e}")
             try:
-                # إذا فشل التشغيل، ننتقل للتالي فوراً بدون انتظار
                 await self.change_stream(client, chat_id)
             except:
                 pass
@@ -504,31 +493,24 @@ class Call:
             except: pass
 
     async def decorators(self):
-        assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
-
-        async def unified_update_handler(client, update: Update):
-            if not getattr(update, "chat_id", None):
-                return
-            
-            chat_id = update.chat_id
-
-            if isinstance(update, StreamEnded):
-                if update.stream_type == StreamEnded.Type.AUDIO:
-                    try: await self.change_stream(client, chat_id)
-                    except Exception as e: 
-                        pass
-            
-            elif isinstance(update, ChatUpdate):
-                status = update.status
-                if (status & ChatUpdate.Status.LEFT_CALL) or \
-                   (status & ChatUpdate.Status.KICKED) or \
-                   (status & ChatUpdate.Status.CLOSED_VOICE_CHAT):
-                    await self.stop_stream(chat_id)
-
-        for assistant in assistants:
-            try:
-                if hasattr(assistant, 'on_update'):
-                    assistant.on_update()(unified_update_handler)
-            except: pass
+        # تم إصلاح الديكورات لتجنب AttributeError
+        for client in [self.one, self.two, self.three, self.four, self.five]:
+            if client:
+                @client.on_kicked()
+                @client.on_closed_voice_chat()
+                @client.on_left()
+                @client.on_stream_end()
+                async def handler(client, update: Update):
+                    try:
+                        chat_id = update.chat_id
+                    except AttributeError:
+                        return
+                    
+                    if isinstance(update, StreamEnded):
+                        if update.stream_type == StreamEnded.Type.AUDIO:
+                            try: await self.change_stream(client, chat_id)
+                            except: pass
+                    else:
+                        await self.stop_stream(chat_id)
 
 Hotty = Call()
