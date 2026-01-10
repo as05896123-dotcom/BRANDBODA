@@ -1,3 +1,18 @@
+# bot.py
+# تم تعديل هذا الملف ليحمِي التشغيل عبر استدعاء core.pytgcalls_patch أولاً
+
+# استدعاء الباتش أولًا ــــ لازم قبل أي import لـ pyrogram / pytgcalls
+try:
+    # المحاولة الأولى: استيراد مباشرة من الحزمة core (عند التشغيل بداخل الحزمة)
+    import core.pytgcalls_patch  # noqa: F401
+except Exception:
+    try:
+        # المحاولة الثانية: استيراد نسبي لو تم تشغيل الملف كـ module داخل الحزمة
+        from .core import pytgcalls_patch  # type: ignore
+    except Exception:
+        # إذا فشل الاستدعاء، لا نوقف البوت هنا — الباتش نفسه يتعامل مع import failures بهدوء.
+        pass
+
 import sys
 import asyncio
 from pyrogram import Client, errors
