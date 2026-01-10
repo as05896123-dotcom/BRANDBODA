@@ -17,15 +17,38 @@ from pytgcalls.types import (
     ChatUpdate,
     Update
 )
-from pytgcalls.exceptions import (
-    NoActiveGroupCall,
-    NoAudioSourceFound,
-    NoVideoSourceFound,
-    TelegramServerError,
-    ConnectionNotFound,
-    AlreadyJoinedError,
-    GroupCallNotFound
-)
+
+# =======================
+# Compatible exceptions import
+# =======================
+# نحاول استيراد الاستثناءات الشائعة من pytgcalls، وإذا لم تتوفر نعرّف بدائل محلية
+try:
+    from pytgcalls.exceptions import (
+        NoActiveGroupCall,
+        NoAudioSourceFound,
+        NoVideoSourceFound,
+        ConnectionNotFound,
+        AlreadyJoinedError,
+        GroupCallNotFound,
+    )
+except Exception:
+    class NoActiveGroupCall(Exception): pass
+    class NoAudioSourceFound(Exception): pass
+    class NoVideoSourceFound(Exception): pass
+    class ConnectionNotFound(Exception): pass
+    class AlreadyJoinedError(Exception): pass
+    class GroupCallNotFound(Exception): pass
+
+# TelegramServerError قد تكون موجودة في مكتبة أخرى مثل ntgcalls أو غير موجودة تمامًا
+try:
+    from pytgcalls.exceptions import TelegramServerError  # محاولة أولى
+except Exception:
+    try:
+        from ntgcalls import TelegramServerError  # محاولة ثانية
+    except Exception:
+        class TelegramServerError(Exception): pass
+
+# =======================
 
 # استيراد الدوال الخام اللازمة
 from pyrogram.raw import functions as raw_functions
@@ -54,7 +77,7 @@ from BrandrdXMusic.utils.inline.play import stream_markup
 
 try:
     from BrandrdXMusic.utils.inline.play import stream_markup2
-except ImportError:
+except Exception:
     stream_markup2 = None
 
 autoend = {}
@@ -75,7 +98,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
     return MediaStream(
         media_path=path,
         audio_parameters=audio_params,
-        audio_flags=MediaStream.Flags.REQUIRED,  # نضمن إرسال الصوت
+        audio_flags=MediaStream.Flags.REQUIRED,
         video_parameters=video_params,
         video_flags=MediaStream.Flags.IGNORE if not video else MediaStream.Flags.REQUIRED,
         ffmpeg_parameters=final_ffmpeg if final_ffmpeg else None,
@@ -137,12 +160,11 @@ class Call:
             raise NoActiveGroupCall()
         except Exception as e:
             err_str = str(e)
-            # إذا كان الخطأ ناتجاً عن "كول زومبي"، نعيد تصنيف الخطأ كمكالمة غير نشطة
+            # إذا كان الخطأ ناتجاً عن "كول زومبي" أو مشاكل واجهة الاتصال، نعيد تصنيف الخطأ كمكالمة غير نشطة
             if "GROUPCALL_INVALID" in err_str or "call_interface" in err_str:
                 raise NoActiveGroupCall()
             LOGGER(__name__).error(f"_play_stream_safe error for {chat_id}: {err_str}")
-            # نتجنب رفع الخطأ لحماية البوت من الانهيار التام
-            # raise e  <-- تم تعطيل رفع الخطأ
+            # لا نرمي الخطأ هنا لتجنب انهيار البوت تلقائيًا
 
     # بدء تشغيل عملاء المكالمات
     async def start(self):
@@ -169,25 +191,29 @@ class Call:
         client = await self.get_tgcalls(chat_id)
         try:
             await client.pause(chat_id)
-        except: pass
+        except Exception:
+            pass
 
     async def resume_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.resume(chat_id)
-        except: pass
+        except Exception:
+            pass
 
     async def mute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.mute(chat_id)
-        except: pass
+        except Exception:
+            pass
 
     async def unmute_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
             await client.unmute(chat_id)
-        except: pass
+        except Exception:
+            pass
 
     # إيقاف البث والخروج من المكالمة
     async def stop_stream(self, chat_id: int):
@@ -263,6 +289,7 @@ class Call:
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
         except (TelegramServerError, ConnectionNotFound):
+            # TelegramServerError قد تكون حقيقية أو بديلة أحطناها أعلاه
             raise AssistantErr(_["call_10"])
         except Exception as e:
             LOGGER(__name__).error(f"Join Call Error: {e}")
@@ -296,8 +323,10 @@ class Call:
                 if chat_id in self.active_calls:
                     try:
                         await client.leave_call(chat_id)
-                    except Exception: pass
-                    finally: self.active_calls.discard(chat_id)
+                    except Exception:
+                        pass
+                    finally:
+                        self.active_calls.discard(chat_id)
                 return
 
             # إدارة خاصية التكرار loop
@@ -315,15 +344,18 @@ class Call:
                 if chat_id in self.active_calls:
                     try:
                         await client.leave_call(chat_id)
-                    except Exception: pass
-                    finally: self.active_calls.discard(chat_id)
+                    except Exception:
+                        pass
+                    finally:
+                        self.active_calls.discard(chat_id)
                 return
         except Exception:
             # خطأ أثناء التحضير، نغادر المكالمة
             try:
                 await _clear_(chat_id)
                 await client.leave_call(chat_id)
-            except Exception: pass
+            except Exception:
+                pass
             return
 
         # معلومات المسار التالي
