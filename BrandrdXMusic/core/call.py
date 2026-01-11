@@ -35,7 +35,21 @@ from BrandrdXMusic.utils.stream.autoclear import auto_clean
 from BrandrdXMusic.utils.thumbnails import get_thumb
 from BrandrdXMusic.utils.inline.play import stream_markup
 
-# استيراد زر التقديم البديل إن وجد
+# Import get_string for localization (fallback defined if unavailable)
+try:
+    from BrandrdXMusic.utils.strings import get_string
+except ImportError:
+    def get_string(lang):
+        # Placeholder dictionary for localization keys used in code
+        return {
+            "call_6": "Unable to proceed with playback.",
+            "call_7": "Processing request...",
+            "call_8": "Failed to start the group call.",
+            "call_10": "Telegram server error occurred.",
+            "stream_1": "{}\nTitle: {}\nDuration: {}\nRequested by {}"
+        }
+
+# Import stream_markup2 if available
 try:
     from BrandrdXMusic.utils.inline.play import stream_markup2
 except ImportError:
@@ -46,7 +60,7 @@ counter = {}
 AUTO_END_TIME = 1
 
 def dynamic_media_stream(path: str, video: bool = False, ffmpeg_params: str = None) -> MediaStream:
-    """إنشاء MediaStream جديد للبث الصوتي أو المرئي."""
+    """Create a new MediaStream for audio or video streaming."""
     audio_params = AudioQuality.HIGH
     video_params = VideoQuality.SD_480p if video else None
     return MediaStream(
@@ -58,7 +72,7 @@ def dynamic_media_stream(path: str, video: bool = False, ffmpeg_params: str = No
     )
 
 async def _clear_(chat_id: int) -> None:
-    """مسح قائمة التشغيل النشطة وتنظيف الحالات."""
+    """Clear the active playlist and cleanup states."""
     if popped := db.pop(chat_id, None):
         await auto_clean(popped)
     await remove_active_video_chat(chat_id)
@@ -78,7 +92,7 @@ class Call:
         self.userbot5 = Client("BrandrdXMusic5", config.API_ID, config.API_HASH, session_string=config.STRING5) if getattr(config, "STRING5", None) else None
         self.five = PyTgCalls(self.userbot5) if self.userbot5 else None
 
-        # ربط كل معرف عميل Pyrogram بمثيله من PyTgCalls
+        # Map each Pyrogram client to its PyTgCalls counterpart
         self.pytgcalls_map = {}
         if self.userbot1: self.pytgcalls_map[id(self.userbot1)] = self.one
         if self.userbot2: self.pytgcalls_map[id(self.userbot2)] = self.two
@@ -89,7 +103,7 @@ class Call:
         self.active_calls = set()
 
     async def get_tgcalls(self, chat_id: int):
-        """الحصول على كائن PyTgCalls المناسب لهذه الدردشة."""
+        """Get the appropriate PyTgCalls client for the chat."""
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
@@ -122,7 +136,7 @@ class Call:
             pass
 
     async def stop_stream(self, chat_id: int):
-        """إيقاف البث الحالي ومغادرة المكالمة الصوتية."""
+        """Stop the current stream and leave the voice chat."""
         client = await self.get_tgcalls(chat_id)
         try:
             await _clear_(chat_id)
@@ -133,7 +147,7 @@ class Call:
             self.active_calls.discard(chat_id)
 
     async def force_stop_stream(self, chat_id: int):
-        """فرض إنهاء البث وتنظيف القائمة."""
+        """Force stop the stream and clean playlist."""
         client = await self.get_tgcalls(chat_id)
         try:
             if queue := db.get(chat_id):
@@ -151,7 +165,7 @@ class Call:
             self.active_calls.discard(chat_id)
 
     async def skip_stream(self, chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
-        """تخطي المسار الحالي وتشغيل رابط جديد فورًا."""
+        """Skip the current track and immediately play a new one."""
         client = await self.get_tgcalls(chat_id)
         if not link.startswith("http"):
             link = os.path.abspath(link)
@@ -162,7 +176,7 @@ class Call:
         await client.change_stream(chat_id, stream)
 
     async def seek_stream(self, chat_id: int, file_path: str, to_seek: str, duration: str, mode):
-        """الانتقال إلى نقطة معينة في الملف الجاري بثه."""
+        """Seek to a specific point in the currently playing file."""
         client = await self.get_tgcalls(chat_id)
         ffmpeg_params = f"-ss {to_seek} -to {duration}"
         stream = MediaStream(file_path,
@@ -173,7 +187,7 @@ class Call:
         await client.change_stream(chat_id, stream)
 
     async def speedup_stream(self, chat_id: int, file_path: str, speed: float, playing: list):
-        """تسريع أو إبطاء الاستماع عن طريق إعادة ترميز الملف مؤقتًا."""
+        """Speed up or slow down playback by re-encoding the file temporarily."""
         client = await self.get_tgcalls(chat_id)
         file_path = os.path.abspath(file_path)
         base = os.path.basename(file_path)
@@ -211,14 +225,14 @@ class Call:
             raise AssistantErr("Stream mismatch during speedup.")
 
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
-        """الانضمام إلى المحادثة الصوتية وبدء تشغيل المسار المحدد."""
+        """Join the voice chat and start playing the specified track."""
         client = await self.get_tgcalls(chat_id)
         assistant = await group_assistant(self, chat_id)
         lang = await get_lang(chat_id)
         _ = get_string(lang)
         if not link.startswith("http"):
             link = os.path.abspath(link)
-        # إعداد تيار الوسائط
+        # Prepare media stream
         if video:
             stream = MediaStream(link, audio_parameters=AudioQuality.HIGH, video_parameters=VideoQuality.SD_480p)
         else:
@@ -227,7 +241,7 @@ class Call:
             await client.play(chat_id, stream)
         except (ChatAdminRequired, NoActiveGroupCall):
             try:
-                # إنشاء مكالمة صوتية جديدة إذا لم توجد
+                # Create a new group call if one doesn't exist
                 peer = await assistant.resolve_peer(chat_id)
                 random_id = random.getrandbits(32)
                 await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
@@ -254,7 +268,7 @@ class Call:
                 pass
 
     async def change_stream(self, client, chat_id: int):
-        """انتقال تلقائي للمسار التالي عند انتهاء البث الحالي."""
+        """Automatically move to the next track when the current stream ends."""
         queue = db.get(chat_id)
         popped = None
         loop = await get_loop(chat_id)
@@ -410,7 +424,7 @@ class Call:
         await self.decorators()
 
     async def decorators(self):
-        """معالج موحد لأحداث StreamEnded وChatUpdate."""
+        """Unified handler for StreamEnded and ChatUpdate events."""
         async def unified_update_handler(client, update: Update):
             chat_id = getattr(update, "chat_id", None)
             if not chat_id:
