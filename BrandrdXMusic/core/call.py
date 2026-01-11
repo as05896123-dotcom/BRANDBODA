@@ -21,7 +21,7 @@ from pytgcalls.types import (
 # =======================
 # Compatible exceptions import
 # =======================
-# نحاول استيراد الاستثناءات الشائعة من pytgcalls، وإذا لم تتوفر نعرّف بدائل محلية
+# Try importing common pytgcalls exceptions; if not available, define fallbacks
 try:
     from pytgcalls.exceptions import (
         NoActiveGroupCall,
@@ -39,18 +39,18 @@ except Exception:
     class AlreadyJoinedError(Exception): pass
     class GroupCallNotFound(Exception): pass
 
-# TelegramServerError قد تكون موجودة في مكتبة أخرى مثل ntgcalls أو غير موجودة تمامًا
+# TelegramServerError may be in pytgcalls or ntgcalls; define fallback if missing
 try:
-    from pytgcalls.exceptions import TelegramServerError  # محاولة أولى
+    from pytgcalls.exceptions import TelegramServerError
 except Exception:
     try:
-        from ntgcalls import TelegramServerError  # محاولة ثانية
+        from ntgcalls import TelegramServerError
     except Exception:
         class TelegramServerError(Exception): pass
 
 # =======================
 
-# استيراد الدوال الخام اللازمة
+# Import Pyrogram raw function for creating a new group call
 from pyrogram.raw import functions as raw_functions
 
 import config
@@ -83,7 +83,7 @@ except Exception:
 autoend = {}
 counter = {}
 
-# === دالة بناء تدفق الوسائط MediaStream ===
+# === Function to build a MediaStream object for playback ===
 def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0) -> MediaStream:
     is_url = isinstance(path, str) and path.startswith("http")
     base_ffmpeg = " -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ac 2"
@@ -93,8 +93,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
     else:
         final_ffmpeg += " -ac 2"
     audio_params = AudioQuality.HIGH
-    video_params = VideoQuality.SD_480p if video else VideoQuality.SD_480p
-
+    video_params = VideoQuality.SD_480p  # Standard definition by default
     return MediaStream(
         media_path=path,
         audio_parameters=audio_params,
@@ -104,7 +103,7 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
         ffmpeg_parameters=final_ffmpeg if final_ffmpeg else None,
     )
 
-# دالة لتنظيف الحالة عند إيقاف الموسيقى أو ترك المكالمة
+# Function to clear state when stopping playback or leaving call
 async def _clear_(chat_id: int) -> None:
     try:
         if popped := db.pop(chat_id, None):
@@ -117,7 +116,7 @@ async def _clear_(chat_id: int) -> None:
 
 class Call:
     def __init__(self):
-        # إعداد 5 حسابات مساعدة (إذا كانت معرفاتها متوفرة)
+        # Setup up to 5 assistant userbots for handling calls
         self.userbot1 = Client("BrandrdXMusic1", config.API_ID, config.API_HASH, session_string=config.STRING1) if getattr(config, "STRING1", None) else None
         self.one = PyTgCalls(self.userbot1) if self.userbot1 else None
 
@@ -135,7 +134,7 @@ class Call:
 
         self.active_calls = set()
 
-        # خريطة id(العميل) -> PyTgCalls instance
+        # Map assistant client IDs to their PyTgCalls instance
         self.pytgcalls_map = {
             id(self.userbot1) if self.userbot1 else None: self.one,
             id(self.userbot2) if self.userbot2 else None: self.two,
@@ -144,29 +143,29 @@ class Call:
             id(self.userbot5) if self.userbot5 else None: self.five,
         }
 
-    # اختيار PyTgCalls المناسب بناءً على المساعد المستخدم في الدردشة
+    # Select the appropriate PyTgCalls instance for the chat
     async def get_tgcalls(self, chat_id: int):
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
-    # تشغيل البث بشكل آمن مع معالجة الأخطاء الشائعة
+    # Safely play a stream with error handling
     async def _play_stream_safe(self, client, chat_id, path, video, duration_sec=0, ffmpeg=None):
         stream = build_stream(path, video, ffmpeg, duration_sec)
         try:
             await client.play(chat_id, stream)
             return
         except (NoActiveGroupCall, GroupCallNotFound):
-            # لا توجد مكالمة نشطة
+            # No active call to play into
             raise NoActiveGroupCall()
         except Exception as e:
             err_str = str(e)
-            # إذا كان الخطأ ناتجاً عن "كول زومبي" أو مشاكل واجهة الاتصال، نعيد تصنيف الخطأ كمكالمة غير نشطة
+            # Reclassify certain errors as no active call (zombie call, interface issues, etc.)
             if "GROUPCALL_INVALID" in err_str or "call_interface" in err_str:
                 raise NoActiveGroupCall()
             LOGGER(__name__).error(f"_play_stream_safe error for {chat_id}: {err_str}")
-            # لا نرمي الخطأ هنا لتجنب انهيار البوت تلقائيًا
+            # Do not re-raise to avoid crashing the bot
 
-    # بدء تشغيل عملاء المكالمات
+    # Start all PyTgCalls clients
     async def start(self):
         LOGGER(__name__).info("🚀 Starting Audio Engine...")
         clients = [c for c in [self.one, self.two, self.three, self.four, self.five] if c]
@@ -175,7 +174,7 @@ class Call:
             await asyncio.gather(*tasks)
         await self.decorators()
 
-    # حساب زمن التأخير (ping) المتوسط لكل العملاء
+    # Calculate average ping of assistant clients
     async def ping(self):
         pings = []
         clients = [c for c in [self.one, self.two, self.three, self.four, self.five] if c]
@@ -186,7 +185,7 @@ class Call:
                 pass
         return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
 
-    # دوال التحكم بالبث
+    # Playback control methods
     async def pause_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
@@ -215,7 +214,7 @@ class Call:
         except Exception:
             pass
 
-    # إيقاف البث والخروج من المكالمة
+    # Stop streaming and leave the call
     async def stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         await _clear_(chat_id)
@@ -227,7 +226,7 @@ class Call:
             finally:
                 self.active_calls.discard(chat_id)
 
-    # إيقاف اضطراري مع تنظيف إضافي
+    # Force-stop streaming with additional cleanup
     async def force_stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         try:
@@ -246,18 +245,19 @@ class Call:
             finally:
                 self.active_calls.discard(chat_id)
 
-    # الانضمام إلى المكالمة وتشغيل الرابط أو الملف
+    # Join a call and play a link or file
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
         client = await self.get_tgcalls(chat_id)
         assistant = await group_assistant(self, chat_id)
         lang = await get_lang(chat_id)
         _ = get_string(lang)
 
+        # Convert file path to absolute if needed
         if not link.startswith("http"):
             link = os.path.abspath(link)
 
         try:
-            # محاولة دخول المجموعة كمساعد (تجنب UserAlreadyParticipant)
+            # Try to ensure assistant is in the group (ignore if already a participant)
             try:
                 await assistant.join_chat(chat_id)
             except UserAlreadyParticipant:
@@ -265,44 +265,43 @@ class Call:
             except Exception:
                 pass
 
-            # محاولة التشغيل الآمن
+            # Attempt safe streaming
             try:
                 await self._play_stream_safe(client, chat_id, link, bool(video))
             except NoActiveGroupCall:
                 try:
-                    # إنشاء مكالمة جديدة إذا لم توجد واحدة نشطة
-                    try:
-                        peer = await assistant.resolve_peer(chat_id)
-                        random_id = random.getrandbits(32)
-                        await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
-                        await asyncio.sleep(1.5)
-                    except Exception:
-                        pass  # تجاهل الأخطاء الثانوية
-
-                    await self._play_stream_safe(client, chat_id, link, bool(video))
+                    # No active group call: create a new one with Pyrogram raw function
+                    peer = await assistant.resolve_peer(chat_id)
+                    random_id = random.getrandbits(32)
+                    await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
+                    await asyncio.sleep(1.5)  # brief delay to ensure the call is ready
                 except Exception:
-                    raise AssistantErr(_["call_8"])
+                    pass  # ignore sub-errors
+
+                await self._play_stream_safe(client, chat_id, link, bool(video))
+            except Exception:
+                raise AssistantErr(_["call_8"])
 
         except (NoActiveGroupCall, AssistantErr):
-            # فشل في الانضمام للتشغيل
+            # Failed to join or start streaming
             raise AssistantErr(_["call_8"])
         except (NoAudioSourceFound, NoVideoSourceFound):
             raise AssistantErr(_["call_11"])
         except (TelegramServerError, ConnectionNotFound):
-            # TelegramServerError قد تكون حقيقية أو بديلة أحطناها أعلاه
+            # Server or connection issue
             raise AssistantErr(_["call_10"])
         except Exception as e:
             LOGGER(__name__).error(f"Join Call Error: {e}")
             raise AssistantErr(_["call_8"])
 
-        # تحديث الحالة عند الانضمام الناجح
+        # Successfully joined and started streaming
         self.active_calls.add(chat_id)
         await add_active_chat(chat_id)
         await music_on(chat_id)
         if video:
             await add_active_video_chat(chat_id)
 
-        # إعداد الإنهاء التلقائي إذا كان المساعد وحده في المكالمة
+        # Set up auto-end if enabled and assistant is alone
         if await is_autoend():
             try:
                 if await assistant.get_chat_members_count(chat_id) <= 1:
@@ -310,14 +309,14 @@ class Call:
             except Exception:
                 pass
 
-    # تغيير المسار (تشغيل التالي أو إعادته)
+    # Change to the next stream in queue (called on stream end or skip)
     async def change_stream(self, client, chat_id: int):
         check = db.get(chat_id)
         popped = None
         loop = await get_loop(chat_id)
 
         try:
-            # إنتهى الطابور
+            # If queue is empty, clear and leave
             if not check:
                 await _clear_(chat_id)
                 if chat_id in self.active_calls:
@@ -329,7 +328,7 @@ class Call:
                         self.active_calls.discard(chat_id)
                 return
 
-            # إدارة خاصية التكرار loop
+            # Handle loop/repeat functionality
             if loop == 0:
                 popped = check.pop(0)
             else:
@@ -339,6 +338,7 @@ class Call:
             if popped:
                 await auto_clean(popped)
 
+            # If after popping queue is empty, leave call
             if not check:
                 await _clear_(chat_id)
                 if chat_id in self.active_calls:
@@ -350,7 +350,7 @@ class Call:
                         self.active_calls.discard(chat_id)
                 return
         except Exception:
-            # خطأ أثناء التحضير، نغادر المكالمة
+            # On any prep error, clean up and leave
             try:
                 await _clear_(chat_id)
                 await client.leave_call(chat_id)
@@ -358,7 +358,7 @@ class Call:
                 pass
             return
 
-        # معلومات المسار التالي
+        # Prepare next track info
         queued = check[0]["file"]
         lang = await get_lang(chat_id)
         _ = get_string(lang)
@@ -378,6 +378,7 @@ class Call:
             return stream_markup(_, vid_id, chat_id)
 
         try:
+            # Handle various stream types (live YouTube, video IDs, playlists, etc.)
             if "live_" in queued:
                 n, link = await YouTube.video(videoid, True)
                 if n == 0:
@@ -489,7 +490,7 @@ class Call:
             except Exception:
                 pass
 
-    # دوال التخطي والبحث والتسريع
+    # Stream control helpers: skip, seek, speed up
     async def skip_stream(self, chat_id, link, video=None, image=None):
         client = await self.get_tgcalls(chat_id)
         if not link.startswith("http"):
@@ -512,7 +513,10 @@ class Call:
 
         if not os.path.exists(out):
             vs = str(2.0 / float(speed))
-            cmd = f'ffmpeg -i "{file_path}" -filter:v "setpts={vs}*PTS" -filter:a atempo={speed} -y "{out}"'
+            cmd = (
+                f'ffmpeg -i "{file_path}" '
+                f'-filter:v "setpts={vs}*PTS" -filter:a atempo={speed} -y "{out}"'
+            )
             proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await proc.communicate()
 
@@ -530,14 +534,14 @@ class Call:
                 "speed": speed
             })
 
-    # تسجيل معالجات تحديثات PyTgCalls
+    # Attach update handlers for StreamEnded and call updates
     async def decorators(self):
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
 
-        # معالج موحد لجميع التحديثات الهامة
+        # Unified update handler for PyTgCalls updates
         async def unified_update_handler(client, update: Update):
             try:
-                # استخراج معرف الدردشة بطريقة مرنة
+                # Determine chat_id from update
                 chat_id = getattr(update, "chat_id", None)
                 if not chat_id:
                     chat_obj = getattr(update, "chat", None)
@@ -546,26 +550,24 @@ class Call:
                 if not chat_id:
                     return
 
-                # عند انتهاء البث الصوتي (ملف انتهى)
+                # When a stream ends, proceed to next track
                 if isinstance(update, StreamEnded):
                     try:
                         await self.change_stream(client, chat_id)
                     except Exception as e:
                         LOGGER(__name__).error(f"Error handling StreamEnded for {chat_id}: {e}")
 
-                # عند مغادرة أو طرد المساعد أو إغلاق المكالمة الصوتية
+                # When assistant leaves or is kicked, stop streaming
                 elif isinstance(update, ChatUpdate):
                     status = update.status
-                    if (status == ChatUpdate.Status.LEFT_CALL) or \
-                       (status == ChatUpdate.Status.KICKED) or \
-                       (status == ChatUpdate.Status.CLOSED_VOICE_CHAT):
+                    if status in (ChatUpdate.Status.LEFT_CALL, ChatUpdate.Status.KICKED, ChatUpdate.Status.CLOSED_VOICE_CHAT):
                         await self.stop_stream(chat_id)
 
             except Exception:
-                # تجنب الأخطاء الثانوية
+                # Suppress any secondary errors
                 pass
 
-        # ربط المعالج بكل عميل PyTgCalls
+        # Register the update handler with each PyTgCalls client
         for assistant in assistants:
             try:
                 if hasattr(assistant, 'on_update'):
@@ -573,5 +575,5 @@ class Call:
             except Exception as e:
                 LOGGER(__name__).error(f"Failed to attach decorators: {e}")
 
-# تهيئة مثيل الـCall
+# Instantiate the Call handler
 Hotty = Call()
