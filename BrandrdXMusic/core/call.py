@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-call.py
-إصدار مُحصّن ومُعاد البناء للعمل مع:
+call.py — Call controller for BrandrdXMusic
+مصمم للعمل مع:
  - py-tgcalls >= 2.2.8
- - ntgcalls >= 2.0.6
-يحتوي:
+ - ntgcalls >= 2.0.6 (fallback)
+تحسينات:
+ - حماية من الاستثناءات الغير متوافرة
+ - الكشف عن UpdateGroupCall بدون chat_id
+ - استرداد Zombie Calls
+ - watchdog دوري و locks لكل chat
  - دعم حتى 5 مساعدين
- - حماية من CHAT_ADMIN_REQUIRED
- - حماية ضد UpdateGroupCall (chat_id missing) عبر معالجة ذكية وتغليف المُعلّقات
- - استرداد المكالمات الميتة (Zombie Call recovery)
- - queue، loop، seek، speedup، pause/resume، mute/unmute
- - تعليقات تفصيلية
 """
 
 import asyncio
 import os
 import random
-import inspect
 import contextlib
 from datetime import datetime, timedelta
 from typing import Union, Optional, Dict
@@ -25,7 +23,6 @@ from pyrogram import Client
 from pyrogram.errors import UserAlreadyParticipant
 from pyrogram.types import InlineKeyboardMarkup
 
-# PyTgCalls / NTgCalls imports
 from pytgcalls import PyTgCalls
 from pytgcalls.types import (
     MediaStream,
@@ -36,9 +33,7 @@ from pytgcalls.types import (
     Update,
 )
 
-# ===========================
-# استيراد الاستثناءات بشكل مرن
-# ===========================
+# استيراد الاستثناءات بتسامح (fallbacks إذا لم توجد)
 try:
     from pytgcalls.exceptions import (
         NoActiveGroupCall,
@@ -56,23 +51,19 @@ except Exception:
     class AlreadyJoinedError(Exception): pass
     class GroupCallNotFound(Exception): pass
 
-# TelegramServerError قد تكون في pytgcalls أو ntgcalls — نعمل fallback
+# TelegramServerError قد تكون متوفرة في ntgcalls
 try:
     from pytgcalls.exceptions import TelegramServerError
 except Exception:
     try:
-        from ntgcalls import TelegramServerError  # بعض النسخ توفره هنا
+        from ntgcalls import TelegramServerError  # بعض الحزم توفرها هنا
     except Exception:
         class TelegramServerError(Exception): pass
 
-# ===========================
-# raw functions
-# ===========================
+# raw functions لإنشاء GroupCall عند الحاجة
 from pyrogram.raw import functions as raw_functions
 
-# ===========================
-# مشروعك: استيراد الأدوات الداخلية
-# ===========================
+# استيراد حاجات المشروع
 import config
 from strings import get_string
 from BrandrdXMusic import LOGGER, YouTube, app
@@ -100,75 +91,53 @@ try:
 except Exception:
     stream_markup2 = None
 
-# ===========================
-# Global states
-# ===========================
+# حالات عامة
 autoend: Dict[int, datetime] = {}
-counter: Dict[int, dict] = {}
-locks: Dict[int, asyncio.Lock] = {}  # lock per chat to avoid concurrent change_stream
+locks: Dict[int, asyncio.Lock] = {}
 watchdog_task: Optional[asyncio.Task] = None
 
-# ===========================
-# Defensive monkeypatch for pytgcalls on_update decorator
-# (Purpose: if pytgcalls internal processing raises unexpected AttributeError for certain Update types,
-#  wrap handlers to avoid crashing dispatcher)
-# ===========================
-def _safe_patch_pytgcalls():
+def get_lock(chat_id: int) -> asyncio.Lock:
+    """كل دردشة لها Lock لمنع حالات السباق عند تغيير المسار/الانضمام."""
+    if chat_id not in locks:
+        locks[chat_id] = asyncio.Lock()
+    return locks[chat_id]
+
+def safe_extract_chat_id(update) -> Optional[int]:
+    """حاول استخراج chat_id من Update بطرق متعددة لتغلب على اختلاف أشكال التحديث."""
     try:
-        import pytgcalls.mtproto.pyrogram_client as _pc
+        if hasattr(update, "chat_id"):
+            cid = getattr(update, "chat_id")
+            if isinstance(cid, int):
+                return cid
+        if hasattr(update, "chat"):
+            chat = getattr(update, "chat")
+            if hasattr(chat, "id"):
+                return getattr(chat, "id")
+        # بعض النسخ تحتوي group_call أو call
+        for attr in ("group_call", "call", "peer", "message"):
+            if hasattr(update, attr):
+                obj = getattr(update, attr)
+                if isinstance(obj, int):
+                    return obj
+                if hasattr(obj, "chat_id"):
+                    return getattr(obj, "chat_id")
+                if hasattr(obj, "id"):
+                    return getattr(obj, "id")
     except Exception:
-        return
+        return None
+    return None
 
-    for name, obj in inspect.getmembers(_pc):
-        if inspect.isclass(obj) and hasattr(obj, "on_update"):
-            try:
-                orig = getattr(obj, "on_update")
-
-                def make_safe(orig_func):
-                    def safe_on_update(self, *dargs, **dkwargs):
-                        orig_decorator = orig_func(self, *dargs, **dkwargs)
-
-                        def new_decorator(func):
-                            # create safe wrapper around func
-                            async def safe_handler(*h_args, **h_kwargs):
-                                try:
-                                    return await func(*h_args, **h_kwargs)
-                                except Exception as e:
-                                    # swallow handler errors but log them
-                                    try:
-                                        LOGGER(__name__).warning(f"Suppressed update handler error: {e}")
-                                    except Exception:
-                                        pass
-                                    return None
-                            # return original decorator applied to wrapped function
-                            return orig_decorator(safe_handler)
-                        return new_decorator
-                    return safe_on_update
-
-                setattr(obj, "on_update", make_safe(orig))
-            except Exception:
-                # best-effort patch: ignore if can't patch
-                continue
-
-# apply patch immediately
-_safe_patch_pytgcalls()
-
-# ===========================
-# Helper: build MediaStream
-# ===========================
-def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: int = 0) -> MediaStream:
-    # add reconnect options for http sources to avoid mid-stream drop
+def build_stream(path: str, video: bool = False, ffmpeg: Optional[str] = None, duration: int = 0) -> MediaStream:
+    """بناء MediaStream مع معلمات ffmpeg مناسبة للروابط والملفات."""
     is_url = isinstance(path, str) and path.startswith("http")
     base_ffmpeg = " -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ac 2"
-    final_ffmpeg = ffmpeg or ""
+    final_ffmpeg = (ffmpeg or "")
     if is_url:
         final_ffmpeg += base_ffmpeg
     else:
         final_ffmpeg += " -ac 2"
-
     audio_params = AudioQuality.HIGH
-    video_params = VideoQuality.SD_480p if video else VideoQuality.SD_480p
-
+    video_params = VideoQuality.SD_480p
     return MediaStream(
         media_path=path,
         audio_parameters=audio_params,
@@ -178,73 +147,23 @@ def build_stream(path: str, video: bool = False, ffmpeg: str = None, duration: i
         ffmpeg_parameters=final_ffmpeg if final_ffmpeg else None,
     )
 
-# ===========================
-# Helper: lock per chat
-# ===========================
-def get_lock(chat_id: int) -> asyncio.Lock:
-    if chat_id not in locks:
-        locks[chat_id] = asyncio.Lock()
-    return locks[chat_id]
-
-# ===========================
-# Helper: robust get chat id from update (try multiple shapes)
-# ===========================
-def extract_chat_id_from_update(update) -> Optional[int]:
-    # try many shapes to extract chat id safely
-    try:
-        # common attribute
-        if hasattr(update, "chat_id"):
-            cid = getattr(update, "chat_id")
-            if isinstance(cid, int): return cid
-        # some updates include chat object
-        if hasattr(update, "chat"):
-            chat = getattr(update, "chat")
-            if hasattr(chat, "id"):
-                return getattr(chat, "id")
-        # raw group call shapes
-        if hasattr(update, "group_call"):
-            gc = getattr(update, "group_call")
-            # sometimes group_call has full_chat or peer
-            if hasattr(gc, "full_chat"):
-                return getattr(gc, "full_chat")
-            if hasattr(gc, "id") and isinstance(getattr(gc, "id"), int):
-                return getattr(gc, "id")
-        # some updates have "call" or "peer"
-        for attr in ("call", "peer", "from_id"):
-            if hasattr(update, attr):
-                v = getattr(update, attr)
-                if isinstance(v, int):
-                    return v
-                if hasattr(v, "chat_id"):
-                    return getattr(v, "chat_id")
-                if hasattr(v, "id"):
-                    return getattr(v, "id")
-    except Exception:
-        return None
-    return None
-
-# ===========================
-# Clear/cleanup helper
-# ===========================
 async def _clear_(chat_id: int) -> None:
+    """تنظيف السجل عند إيقاف أو انتهاء الطابور."""
     try:
         if popped := db.pop(chat_id, None):
             await auto_clean(popped)
+    except Exception:
+        pass
+    with contextlib.suppress(Exception):
         await remove_active_video_chat(chat_id)
+    with contextlib.suppress(Exception):
         await remove_active_chat(chat_id)
+    with contextlib.suppress(Exception):
         await set_loop(chat_id, 0)
-    except Exception as e:
-        try:
-            LOGGER(__name__).warning(f"_clear_ failed for {chat_id}: {e}")
-        except Exception:
-            pass
 
-# ===========================
-# Main Call Controller
-# ===========================
 class Call:
     def __init__(self):
-        # init up to 5 userbots (if strings provided)
+        # إنشاء المستخدمين المساعدين إن وُجدوا
         self.userbot1 = Client("BrandrdXMusic1", config.API_ID, config.API_HASH, session_string=getattr(config, "STRING1", None)) if getattr(config, "STRING1", None) else None
         self.one = PyTgCalls(self.userbot1) if self.userbot1 else None
 
@@ -261,7 +180,6 @@ class Call:
         self.five = PyTgCalls(self.userbot5) if self.userbot5 else None
 
         self.active_calls = set()
-        # map id(pyrogram_client) -> pytgcalls instance
         self.pytgcalls_map = {
             id(self.userbot1) if self.userbot1 else None: self.one,
             id(self.userbot2) if self.userbot2 else None: self.two,
@@ -270,45 +188,27 @@ class Call:
             id(self.userbot5) if self.userbot5 else None: self.five,
         }
 
-        # cache for assistant own user ids {client: user_id}
-        self._assistant_user_id_cache: Dict[Client, int] = {}
-
-    # choose PyTgCalls instance for the chat via group_assistant helper
     async def get_tgcalls(self, chat_id: int) -> PyTgCalls:
+        """اختيار PyTgCalls المناسب بناءً على assistant الموجود في DB."""
         assistant = await group_assistant(self, chat_id)
         return self.pytgcalls_map.get(id(assistant), self.one)
 
-    # get assistant user id for this client (cached)
-    async def _get_assistant_self_id(self, assistant: Client) -> Optional[int]:
-        if not assistant:
-            return None
-        if assistant in self._assistant_user_id_cache:
-            return self._assistant_user_id_cache[assistant]
-        try:
-            me = await assistant.get_me()
-            if me:
-                self._assistant_user_id_cache[assistant] = getattr(me, "id", None)
-                return self._assistant_user_id_cache[assistant]
-        except Exception:
-            # unable to get me
-            return None
-        return None
-
-    # check if assistant client is admin in chat (must be admin to CreateGroupCall)
     async def _assistant_is_admin(self, assistant: Client, chat_id: int) -> bool:
+        """تحقق إن المساعد (حساب المستخدم) مشرف في الجروب مع صلاحية إدارة المكالمات."""
         try:
-            aid = await self._get_assistant_self_id(assistant)
-            if not aid:
+            if not assistant:
                 return False
+            me = await assistant.get_me()
+            if not me:
+                return False
+            aid = getattr(me, "id", None)
             member = await assistant.get_chat_member(chat_id, aid)
-            # check status: 'creator' or 'administrator'
             status = getattr(member, "status", "")
             if status in ("administrator", "creator"):
-                # try to be permissive: if privileges exist, ensure can_manage_voice_chats if present
+                # بعض الإصدارات تحتوي privileges attribute
                 priv = getattr(member, "privileges", None)
                 if priv is None:
                     return True
-                # attribute may be can_manage_video_chats or can_manage_voice_chats
                 for p in ("can_manage_voice_chats", "can_manage_video_chats", "can_manage_calls"):
                     if hasattr(priv, p):
                         if getattr(priv, p):
@@ -318,43 +218,39 @@ class Call:
                 return True
             return False
         except Exception:
-            # if any error: return False to be safe
             return False
 
-    # robust play wrapper
     async def _play_stream_safe(self, client: PyTgCalls, chat_id: int, path: str, video: bool, duration_sec: int = 0, ffmpeg: Optional[str] = None):
+        """محاولة تشغيل Stream مع تحليل الأخطاء ومحاولات متكررة قصيرة."""
         stream = build_stream(path, video, ffmpeg, duration_sec)
         last_exc = None
-        # try couple attempts
         for attempt in range(1, 3):
             try:
                 await client.play(chat_id, stream)
                 return
             except (NoActiveGroupCall, GroupCallNotFound) as e:
-                last_exc = e
+                # لا توجد مكالمة نشطة
                 raise NoActiveGroupCall()
             except Exception as e:
                 last_exc = e
-                err_str = str(e)
-                # detect zombie / interface error
-                if "GROUPCALL_INVALID" in err_str or "call_interface" in err_str:
+                err = str(e)
+                if "GROUPCALL_INVALID" in err or "call_interface" in err:
                     raise NoActiveGroupCall()
                 try:
-                    LOGGER(__name__).warning(f"_play_stream_safe attempt {attempt} error for {chat_id}: {err_str}")
+                    LOGGER(__name__).warning(f"_play_stream_safe attempt {attempt} for {chat_id} error: {err}")
                 except Exception:
                     pass
                 await asyncio.sleep(0.5 * attempt)
-        # if reach here, raise last
         if last_exc:
             raise last_exc
 
-    # start all call clients & attach handlers
     async def start(self):
+        """تشغيل جميع عملاء PyTgCalls وربط المعالجات."""
         try:
             LOGGER(__name__).info("🚀 Starting Audio Engine...")
         except Exception:
             pass
-        clients = [c for c in [self.one, self.two, self.three, self.four, self.five] if c]
+        clients = [c for c in (self.one, self.two, self.three, self.four, self.five) if c]
         for c in clients:
             try:
                 await c.start()
@@ -363,22 +259,18 @@ class Call:
                     LOGGER(__name__).warning(f"Failed to start PyTgCalls client: {e}")
                 except Exception:
                     pass
-        # attach decorators
         await self.decorators()
-        # start watchdog
         self._start_watchdog()
 
     async def ping(self) -> str:
         pings = []
-        for c in [self.one, self.two, self.three, self.four, self.five]:
+        for c in (self.one, self.two, self.three, self.four, self.five):
             if c:
-                try:
+                with contextlib.suppress(Exception):
                     pings.append(c.ping)
-                except Exception:
-                    pass
         return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
 
-    # playback control
+    # تحكمات بسيطة
     async def pause_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         with contextlib.suppress(Exception):
@@ -399,7 +291,6 @@ class Call:
         with contextlib.suppress(Exception):
             await client.unmute(chat_id)
 
-    # stop & force stop
     async def stop_stream(self, chat_id: int):
         client = await self.get_tgcalls(chat_id)
         await _clear_(chat_id)
@@ -422,9 +313,10 @@ class Call:
                 check.pop(0)
         except Exception:
             pass
-        await remove_active_video_chat(chat_id)
-        await remove_active_chat(chat_id)
-        await _clear_(chat_id)
+        with contextlib.suppress(Exception):
+            await remove_active_video_chat(chat_id)
+            await remove_active_chat(chat_id)
+            await _clear_(chat_id)
         if chat_id in self.active_calls:
             try:
                 await client.leave_call(chat_id)
@@ -433,8 +325,8 @@ class Call:
             finally:
                 self.active_calls.discard(chat_id)
 
-    # join call (robust): create group call only if assistant is admin
     async def join_call(self, chat_id: int, original_chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
+        """الانضمام إلى المكالمة وتشغيل الملف/الرابط مع فحوصات admin و retry."""
         client = await self.get_tgcalls(chat_id)
         assistant = await group_assistant(self, chat_id)
         lang = await get_lang(chat_id)
@@ -443,75 +335,72 @@ class Call:
         if not link.startswith("http"):
             link = os.path.abspath(link)
 
-        # lock to avoid concurrent join attempts for same chat
         lock = get_lock(chat_id)
         async with lock:
-            try:
-                # ensure assistant in chat (best-effort)
-                with contextlib.suppress(Exception):
-                    await assistant.join_chat(chat_id)
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                await assistant.join_chat(chat_id)
 
             try:
-                # try initial play
                 try:
                     await self._play_stream_safe(client, chat_id, link, bool(video))
                 except NoActiveGroupCall:
-                    # before trying CreateGroupCall, ensure assistant is admin in chat
+                    # تأكد أن المساعد admin قبل محاولة CreateGroupCall
+                    is_admin = await self._assistant_is_admin(assistant, chat_id)
+                    if not is_admin:
+                        raise AssistantErr(_["call_9"] if "call_9" in _ else "⚠️ البوت يحتاج أن يكون مشرفًا لبدء المكالمة.")
                     try:
-                        is_admin = await self._assistant_is_admin(assistant, chat_id)
-                        if not is_admin:
-                            # don't attempt to create group call - raise friendly error
-                            raise AssistantErr(_["call_9"] if "call_9" in _ else "⚠️ البوت يحتاج أن يكون مشرفًا لبدء المكالمة.")
-                        # create group call using raw function
+                        peer = await assistant.resolve_peer(chat_id)
+                        random_id = random.getrandbits(32)
+                        await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
+                        await asyncio.sleep(1.2)
+                    except Exception as ce:
+                        # لو فشل الإنشاء، أبلغ المستخدم برسالة عامة
                         try:
-                            peer = await assistant.resolve_peer(chat_id)
-                            random_id = random.getrandbits(32)
-                            await assistant.send(raw_functions.phone.CreateGroupCall(peer=peer, random_id=random_id))
-                            await asyncio.sleep(1.5)
-                        except Exception as ce:
-                            LOGGER(__name__).warning(f"CreateGroupCall attempt failed for {chat_id}: {ce}")
-                        # second attempt
-                        await self._play_stream_safe(client, chat_id, link, bool(video))
-                except Exception as e:
-                    LOGGER(__name__).error(f"Join call play error for {chat_id}: {e}")
-                    raise AssistantErr(_["call_8"])
+                            LOGGER(__name__).warning(f"CreateGroupCall failed for {chat_id}: {ce}")
+                        except Exception:
+                            pass
+                        raise AssistantErr(_["call_8"] if "call_8" in _ else "فشل بدء المكالمة.")
+                    # محاولة تشغيل ثانية
+                    await self._play_stream_safe(client, chat_id, link, bool(video))
             except (NoAudioSourceFound, NoVideoSourceFound):
-                raise AssistantErr(_["call_11"])
+                raise AssistantErr(_["call_11"] if "call_11" in _ else "لم يتم العثور على مصدر صوت/فيديو.")
             except (TelegramServerError, ConnectionNotFound):
-                raise AssistantErr(_["call_10"])
+                raise AssistantErr(_["call_10"] if "call_10" in _ else "خطأ في خوادم تيليجرام أو الاتصال.")
             except AssistantErr:
                 raise
             except Exception as e:
-                LOGGER(__name__).error(f"Join Call Error: {e}")
-                raise AssistantErr(_["call_8"])
+                try:
+                    LOGGER(__name__).error(f"Join Call Error for {chat_id}: {e}")
+                except Exception:
+                    pass
+                raise AssistantErr(_["call_8"] if "call_8" in _ else "فشل في الانضمام للمكالمة.")
 
-            # on success
+            # نجاح
             self.active_calls.add(chat_id)
             await add_active_chat(chat_id)
             await music_on(chat_id)
             if video:
                 await add_active_video_chat(chat_id)
 
-            # autoend handling
+            # autoend detection
             if await is_autoend():
                 try:
-                    # use get_participants if available
-                    if hasattr(assistant, "get_participants"):
-                        parts = await assistant.get_participants(chat_id)
-                        if parts is not None and len(parts) <= 1:
-                            autoend[chat_id] = datetime.now() + timedelta(minutes=1)
-                    else:
-                        # fallback to chat members count
-                        cnt = await assistant.get_chat_members_count(chat_id)
-                        if cnt <= 1:
-                            autoend[chat_id] = datetime.now() + timedelta(minutes=1)
+                    # حاول استخدام get_participants ثم fallback ل get_chat_members_count
+                    participants = None
+                    with contextlib.suppress(Exception):
+                        if hasattr(assistant, "get_participants"):
+                            parts = await assistant.get_participants(chat_id)
+                            participants = len(parts) if parts is not None else None
+                    with contextlib.suppress(Exception):
+                        if participants is None:
+                            participants = await assistant.get_chat_members_count(chat_id)
+                    if participants is not None and participants <= 1:
+                        autoend[chat_id] = datetime.now() + timedelta(minutes=1)
                 except Exception:
                     pass
 
-    # change_stream: move to next track (robust)
-    async def change_stream(self, client, chat_id: int):
+    async def change_stream(self, client: PyTgCalls, chat_id: int):
+        """التبديل إلى المسار التالي في الطابور."""
         lock = get_lock(chat_id)
         async with lock:
             check = db.get(chat_id)
@@ -520,7 +409,6 @@ class Call:
                 loop = await get_loop(chat_id)
             except Exception:
                 loop = 0
-
             try:
                 if not check:
                     await _clear_(chat_id)
@@ -548,7 +436,10 @@ class Call:
                         self.active_calls.discard(chat_id)
                     return
             except Exception as e:
-                LOGGER(__name__).error(f"change_stream prepare failed for {chat_id}: {e}")
+                try:
+                    LOGGER(__name__).error(f"change_stream prepare error for {chat_id}: {e}")
+                except Exception:
+                    pass
                 with contextlib.suppress(Exception):
                     await _clear_(chat_id)
                     await client.leave_call(chat_id)
@@ -654,13 +545,15 @@ class Call:
                         db[chat_id][0]["markup"] = "stream"
 
             except Exception as e:
-                LOGGER(__name__).error(f"Play Error in change_stream for {chat_id}: {e}")
+                try:
+                    LOGGER(__name__).error(f"Play Error in change_stream for {chat_id}: {e}")
+                except Exception:
+                    pass
                 try:
                     await self.change_stream(client, chat_id)
                 except Exception:
                     pass
 
-    # skip / seek / speedup
     async def skip_stream(self, chat_id: int, link: str, video: Union[bool, str] = None, image: Union[bool, str] = None):
         client = await self.get_tgcalls(chat_id)
         if not link.startswith("http"):
@@ -701,49 +594,41 @@ class Call:
                 "speed": speed
             })
 
-    # ===== Decorators / Update handlers =====
     async def decorators(self):
-        assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
+        """ربط معالج موحّد لتحديثات PyTgCalls (StreamEnded, ChatUpdate,...)."""
+        assistants = list(filter(None, (self.one, self.two, self.three, self.four, self.five)))
 
-        # unified handler: robust extraction & actions
         async def unified_update_handler(client, update: Update):
-            # protect everything here — never let it bubble up
             try:
-                # try to get chat id in flexible ways
-                chat_id = extract_chat_id_from_update(update)
-                if not chat_id:
-                    # fallback: some updates carry attribute 'group_call' with 'full_chat_id' or so
-                    try:
-                        chat_id = getattr(update, "chat_id", None)
-                    except Exception:
-                        chat_id = None
+                chat_id = safe_extract_chat_id(update)
                 if not chat_id:
                     return
 
-                # Stream ended -> next track
                 if isinstance(update, StreamEnded):
                     try:
                         await self.change_stream(client, chat_id)
                     except Exception as e:
-                        LOGGER(__name__).error(f"Error handling StreamEnded for {chat_id}: {e}")
+                        try:
+                            LOGGER(__name__).error(f"Error handling StreamEnded for {chat_id}: {e}")
+                        except Exception:
+                            pass
 
-                # Chat updates: left/kicked/closed -> stop
                 elif isinstance(update, ChatUpdate):
                     try:
                         status = update.status
                         if status in (ChatUpdate.Status.LEFT_CALL, ChatUpdate.Status.KICKED, ChatUpdate.Status.CLOSED_VOICE_CHAT):
                             await self.stop_stream(chat_id)
                     except Exception as e:
-                        LOGGER(__name__).warning(f"ChatUpdate handling warning for {chat_id}: {e}")
-
+                        try:
+                            LOGGER(__name__).warning(f"ChatUpdate handling warning for {chat_id}: {e}")
+                        except Exception:
+                            pass
             except Exception as e:
-                # log and swallow
                 try:
                     LOGGER(__name__).warning(f"unified_update_handler outer error: {e}")
                 except Exception:
                     pass
 
-        # attach handler to each assistant (safe because of earlier monkeypatch)
         for assistant in assistants:
             try:
                 if hasattr(assistant, "on_update"):
@@ -754,7 +639,7 @@ class Call:
                 except Exception:
                     pass
 
-    # ===== Watchdog: autoend & zombie recovery =====
+    # watchdog loop للمراقبة واستعادة المكالمات الميتة
     def _start_watchdog(self):
         global watchdog_task
         if watchdog_task and not watchdog_task.done():
@@ -772,71 +657,76 @@ class Call:
                             await _clear_(chat_id)
                             self.active_calls.discard(chat_id)
                             continue
-                        # try to get participants length safely
+                        # تحقق عدد المشاركين
                         participants_count = None
                         with contextlib.suppress(Exception):
                             if hasattr(assistant, "get_participants"):
                                 parts = await assistant.get_participants(chat_id)
                                 participants_count = len(parts) if parts is not None else None
-                            else:
+                        with contextlib.suppress(Exception):
+                            if participants_count is None:
                                 participants_count = await assistant.get_chat_members_count(chat_id)
-                        # if only assistant alone -> schedule autoend or end now
+
+                        # إذا بقي المساعد وحده -> جدولة autoend أو إغلاق
                         if participants_count is not None and participants_count <= 1:
                             if await is_autoend():
                                 if chat_id not in autoend:
                                     autoend[chat_id] = datetime.now() + timedelta(minutes=1)
                             else:
-                                # no autoend: clean up immediately
                                 await self.stop_stream(chat_id)
                                 continue
-                        # handle autoend timeout
+
+                        # تنفيذ autoend عند الوقوع في الوقت
                         if chat_id in autoend:
                             if datetime.now() >= autoend[chat_id]:
                                 await self.stop_stream(chat_id)
                                 autoend.pop(chat_id, None)
-                        # Zombie detection: if ntgcalls says call not found but we have active_calls -> try recover
-                        # We attempt a best-effort recovery: if queue exists, try re-join (only if assistant is admin)
+
+                        # كشف مكالمات ميتة: إذا المساعد خارج المكالمة لكن queue موجودة -> نحاول recovery
+                        in_call = True
                         with contextlib.suppress(Exception):
-                            # check if we are actually in call by querying assistant.get_participants
-                            in_call = False
                             try:
                                 parts = await assistant.get_participants(chat_id)
-                                if parts:
-                                    in_call = True
+                                if not parts:
+                                    in_call = False
                             except Exception:
                                 in_call = False
-                            if not in_call:
-                                # try recovery only if there is something to play
-                                q = db.get(chat_id)
-                                if q and len(q) > 0:
-                                    # attempt to re-join & resume playing first item
+                        if not in_call:
+                            q = db.get(chat_id)
+                            if q and len(q) > 0:
+                                # حاول الاسترداد إذا المساعد admin
+                                is_admin = await self._assistant_is_admin(assistant, chat_id)
+                                if not is_admin:
+                                    await self.stop_stream(chat_id)
+                                    continue
+                                try:
+                                    client = await self.get_tgcalls(chat_id)
+                                    first = q[0]
+                                    file_path = first.get("file")
+                                    video_flag = True if str(first.get("streamtype")) == "video" else False
+                                    await self._play_stream_safe(client, chat_id, file_path, video_flag, first.get("seconds", 0))
+                                    self.active_calls.add(chat_id)
+                                except Exception as ex_re:
                                     try:
-                                        # choose client & play first file
-                                        client = await self.get_tgcalls(chat_id)
-                                        first = q[0]
-                                        file_path = first.get("file")
-                                        video = True if str(first.get("streamtype")) == "video" else False
-                                        # check admin before create
-                                        is_admin = await self._assistant_is_admin(assistant, chat_id)
-                                        if not is_admin:
-                                            await self.stop_stream(chat_id)
-                                            continue
-                                        await self._play_stream_safe(client, chat_id, file_path, video, first.get("seconds", 0))
-                                        # re-add active state
-                                        self.active_calls.add(chat_id)
-                                    except Exception as re:
-                                        LOGGER(__name__).warning(f"Recovery attempt failed for {chat_id}: {re}")
-                                        # if recovery fails repeatedly, force stop to avoid endless loop
-                                        # schedule immediate cleanup next cycle
-                                        await self.stop_stream(chat_id)
+                                        LOGGER(__name__).warning(f"Recovery failed for {chat_id}: {ex_re}")
+                                    except Exception:
+                                        pass
+                                    # اذا فشلت الاستعادة، اغلق لتنجنب loops مستمرة
+                                    await self.stop_stream(chat_id)
                     except Exception as inner:
-                        LOGGER(__name__).warning(f"Watchdog inner error for {chat_id}: {inner}")
+                        try:
+                            LOGGER(__name__).warning(f"Watchdog inner for {chat_id}: {inner}")
+                        except Exception:
+                            pass
                 await asyncio.sleep(20)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                LOGGER(__name__).error(f"Watchdog outer error: {e}")
+                try:
+                    LOGGER(__name__).error(f"Watchdog outer error: {e}")
+                except Exception:
+                    pass
                 await asyncio.sleep(10)
 
-# export instance
+# instance export
 Hotty = Call()
